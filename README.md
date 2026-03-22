@@ -196,12 +196,12 @@ Phase 9  문서화 / 포트폴리오
 
 ### Step 1-1. CLI 입력기
 
-- [ ] **Task 1-1-1. main.go 진입점 작성**
+- [x] **Task 1-1-1. main.go 진입점 작성**
   - **무엇**: `cmd/agent-cli/main.go` — stdin에서 한 줄 읽어서 `runtime.Run()` 호출
   - **왜**: loop를 실제로 실행할 진입점이 없으면 테스트가 불가능함
   - **산출물**: `cmd/agent-cli/main.go`
 
-- [ ] **Task 1-1-2. RequestID / SessionID 생성 로직**
+- [x] **Task 1-1-2. RequestID / SessionID 생성 로직**
   - **무엇**: UUID 기반 request ID 생성, session ID는 이 단계에서 상수로 고정
   - **왜**: state에 ID가 없으면 로그 추적이 불가능하고 Phase 4 session 연동 시 연결점이 없음
   - **산출물**: `internal/agent/id.go`
