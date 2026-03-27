@@ -154,7 +154,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: 이것이 전체 커리큘럼의 핵심 골격. 이후 모든 Phase는 이 루프의 부품을 교체하거나 확장하는 것
   - **산출물**: `internal/agent/runtime.go`
 
-- [ ] **Task 1-5-3. Loop 단위 테스트 작성**
+- [x] **Task 1-5-3. Loop 단위 테스트 작성**
   - **무엇**: mock planner + mock executor 조합으로 `tool_call → finish`, `max step 초과` 케이스 테스트
   - **왜**: planner 교체 시에도 loop가 동작하는지 검증. 이 테스트가 없으면 Phase 3에서 LLM planner로 교체 시 회귀 확인 불가
   - **산출물**: `internal/agent/runtime_test.go`
