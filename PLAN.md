@@ -209,7 +209,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: Phase 7 검색 시나리오의 기반이 되며, LLM planner가 search를 선택하는 흐름을 테스트
   - **산출물**: `internal/tools/search_mock/search_mock.go`
 
-- [ ] **Task 2-2-6. Registry unit test 작성**
+- [x] **Task 2-2-6. Registry unit test 작성**
   - **무엇**: 등록 → 조회 성공, 미등록 name 조회 에러 케이스 테스트
   - **왜**: registry는 단순하지만 이후 모든 tool 조회의 기반이므로 에러 케이스 검증 필수
   - **산출물**: `internal/tools/in_memory_registry_test.go`
