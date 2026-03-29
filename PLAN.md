@@ -221,7 +221,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: planner와 tool 실행을 직접 연결하면 planner가 tool 구현에 의존하게 됨. router가 그 사이를 중재
   - **산출물**: `internal/tools/router.go`
 
-- [ ] **Task 2-3-2. ToolRouter unit test 작성**
+- [x] **Task 2-3-2. ToolRouter unit test 작성**
   - **무엇**: 유효 tool name 라우팅, 잘못된 tool name 에러, input validation 실패 케이스 테스트
   - **왜**: router의 에러 처리가 loop의 retry 정책에 영향을 주므로 각 케이스가 명확히 구분되어야 함
   - **산출물**: `internal/tools/router_test.go`
