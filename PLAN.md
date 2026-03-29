@@ -204,7 +204,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: planner가 tool을 선택하는 시나리오를 현실적으로 테스트하기 위해
   - **산출물**: `internal/tools/weather_mock/weather_mock.go`
 
-- [ ] **Task 2-2-5. search_mock tool 구현**
+- [x] **Task 2-2-5. search_mock tool 구현**
   - **무엇**: 쿼리 문자열을 받아 고정된 검색 결과를 반환하는 mock tool
   - **왜**: Phase 7 검색 시나리오의 기반이 되며, LLM planner가 search를 선택하는 흐름을 테스트
   - **산출물**: `internal/tools/search_mock/search_mock.go`
