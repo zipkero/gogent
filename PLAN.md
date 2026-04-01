@@ -353,6 +353,14 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: LLM 연결 이후 소급 추적 불가능하므로 이 시점에 반드시 시작해야 함
   - **산출물**: `openai_client.go` 또는 `llm_planner.go` 수정
 
+### Step 3-6. 기본 Structured Logger 도입
+
+- [ ] **Task 3-6-1. Logger 인터페이스 및 기본 구현체 작성**
+  - **무엇**: `trace_id`, `session_id`, `request_id`를 기본 필드로 포함하는 structured logger 래퍼. Go 표준 `log/slog` 기반으로 JSON 출력 형식 지원
+  - **왜**: Phase 3에서 LLM 호출이 시작되면 어떤 요청이 어떤 플래너 결정을 내렸는지 로그 없이 추적이 불가능하다. Phase 8의 OTel span 연동 전까지의 디버깅 기반을 이 시점에 확보해야 Phase 4~7에서 실질적으로 활용 가능함
+  - **비고**: `log/slog`는 Go 1.21 표준 패키지이므로 외부 의존 없음. Phase 8 Task 8-3-1은 이 logger에 OTel span trace ID를 연동하는 것으로 범위가 조정됨. LLMPlanner, ToolRouter, Runtime의 주요 진입/종료 지점에서 이 logger를 사용하도록 교체
+  - **산출물**: `internal/observability/logger.go`
+
 ### Phase 3 Exit Criteria
 
 - LLMPlanner가 OpenAI API 호출 후 유효한 PlanResult 반환 확인
@@ -360,6 +368,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - invalid JSON 응답 시 1회 재시도 후 에러 처리 확인
 - hallucinated tool name 방어 (registry에 없는 tool 이름 → 에러) 확인
 - TokenUsage 로그 출력 확인 (request_id, prompt_tokens, completion_tokens)
+- 모든 LLM 호출 및 tool 실행 로그에 trace_id, session_id, request_id 포함 확인 (structured logger)
 - 해당 Phase의 주요 설계 결정을 `docs/decisions/phase3.md`에 기록
 
 ---
@@ -495,6 +504,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: Phase 9의 Task 8-1-1(per-tool timeout)과 역할이 겹치지 않도록 이 Task는 "context 전달 패턴 확립"에 집중하고, Phase 9에서 설정값 외부화를 담당
   - **산출물**: `internal/tools/router.go` 수정 (context deadline 전달), `internal/agent/concurrency_test.go` (동작 검증 테스트)
 
+- [ ] **Task 5-1-2. errgroup을 사용한 병렬 tool 실행 실습**
+  - **무엇**: `golang.org/x/sync/errgroup`을 사용해 독립적인 tool 2개를 goroutine으로 병렬 실행하고 결과를 병합하는 예제 구현. context 취소 시 in-flight goroutine 정리 패턴 포함
+  - **왜**: Phase 6의 Workflow 병렬 실행 엔진(Task 6-1-4b)과 Phase 7의 Worker goroutine 관리가 errgroup + WaitGroup 패턴을 전제로 함. 이 패턴을 Phase 5에서 단순한 tool 실행으로 먼저 실습하지 않으면 Phase 6에서 처음 마주치게 됨
+  - **비고**: 결과물은 독립 실행 파일이 아닌 concurrency 패턴 검증용 테스트 코드로 작성. Phase 6 Task 6-1-4b 구현 시 이 패턴을 직접 참조
+  - **산출물**: `internal/agent/parallel_example_test.go`
+
 ### Step 5-2. Verifier 인터페이스
 
 - [ ] **Task 5-2-1. VerifyStatus / VerifyResult 타입 정의**
@@ -566,7 +581,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 5-5-1b. AgentState에 ReflectionState 필드 추가**
   - **무엇**: `AgentState`에 `ReflectionState` 필드 추가. `ReflectionState`는 `Sufficient bool`, `MissingConditions []string`, `Suggestion string`을 갖는 struct로 `internal/state` 패키지에 정의
   - **왜**: Task 5-5-4에서 "Sufficient=false일 때 Runtime.Run()에 연결"하려면 AgentState에 reflection 결과를 저장하는 필드가 필요함. 이 필드가 없으면 loop가 reflection 결과를 참조할 수 없음
-  - **비고**: `internal/state`는 타입 정의만 담당. `ReflectionState`는 `ReflectResult`와 별개 타입으로 정의해 verifier → state 순환 참조를 방지 (verifier는 ReflectResult 반환, state는 ReflectionState 보관)
+  - **비고**: `internal/state`는 타입 정의만 담당. `ReflectionState`는 `ReflectResult`와 별개 타입으로 정의해 verifier → state 순환 참조를 방지 (verifier는 ReflectResult 반환, state는 ReflectionState 보관). **이 Task 완료 후 `go build ./...` 통과 확인 후 Task 5-5-2로 진행**
   - **산출물**: `internal/state/reflection_state.go`, `internal/state/agent_state.go` 수정
 
 - [ ] **Task 5-5-2. Reflector 인터페이스 정의**
@@ -577,11 +592,13 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 5-5-3. LLMReflector 구현**
   - **무엇**: reflection 전용 prompt를 사용해 LLM을 호출하고 ReflectResult를 반환하는 구현체
   - **왜**: verifier와 동일한 LLMClient를 재사용하되 prompt가 달라야 함
+  - **비고**: **이 Task 완료 후 `go build ./...` 통과 확인 후 Task 5-5-3b로 진행**
   - **산출물**: `internal/verifier/llm_reflector.go`
 
 - [ ] **Task 5-5-3b. prompt_builder에 ReflectionState 반영**
   - **무엇**: `internal/planner/prompt_builder.go`를 수정해 `AgentState.ReflectionState`가 채워져 있을 때 `MissingConditions`와 `Suggestion`을 system prompt에 포함하는 로직 추가
   - **왜**: ReflectionState가 AgentState에 저장되어도 LLMPlanner의 system prompt에 반영되지 않으면 reflection이 다음 Plan 결정에 영향을 주지 못함. loop 제어(Task 5-5-4)와 prompt 반영은 별개 작업
+  - **비고**: **이 Task 완료 후 `go build ./...` 통과 확인 후 Task 5-5-4로 진행**
   - **산출물**: `internal/planner/prompt_builder.go` 수정
 
 - [ ] **Task 5-5-4. Reflection 결과를 AgentState에 반영**
@@ -626,6 +643,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **무엇**: LLMClient를 사용해 사용자 입력을 Task 목록으로 분해하는 구현체
   - **왜**: 실제 LLM 기반 분해가 있어야 호텔 시나리오 같은 현실적 입력 처리 가능
   - **산출물**: `internal/orchestration/llm_task_decomposer.go`
+
+- [ ] **Task 6-1-3b. MockTaskDecomposer 구현**
+  - **무엇**: 고정된 Task 목록을 순서대로 반환하는 테스트용 TaskDecomposer. 호출 횟수 추적 포함
+  - **왜**: ManagerAgent 단위 테스트(Task 6-4-2)에서 분해 로직을 LLM 응답 형식에서 분리해야 테스트 결정성을 확보할 수 있음. LLMTaskDecomposer를 MockLLMClient로 간접 제어하면 테스트가 LLM 응답 JSON 형식에 의존하게 되어 TaskDecomposer 인터페이스 계약과 Workflow 실행 로직을 독립적으로 검증하기 어려움
+  - **비고**: Phase 3의 MockPlanner, MockLLMClient와 동일한 패턴. `testutil/` 또는 `internal/orchestration/` 에 배치
+  - **산출물**: `internal/orchestration/mock_task_decomposer.go`
 
 - [ ] **Task 6-1-4a. Workflow 타입 + topological sort + cycle detection 구현**
   - **무엇**: Task 간 의존 관계를 표현하는 `Workflow` 타입 정의. 위상 정렬(topological sort)로 실행 가능한 순서를 결정하고, 순환 의존(cycle) 감지 시 에러를 반환하는 로직 구현
@@ -731,6 +754,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: CLI 입력기를 HTTP 인터페이스로 교체하는 핵심 단계
   - **산출물**: `internal/api/handler.go`
 
+- [ ] **Task 7-1-2b. 헬스체크 엔드포인트 구현**
+  - **무엇**: `GET /health` 엔드포인트. Redis, Postgres 연결 상태와 Worker 활성 여부를 JSON으로 반환
+  - **왜**: 서비스화 목표에서 프로세스가 정상 동작 중인지 확인할 수단이 없으면 운영 자동화(restart policy, load balancer healthcheck)가 불가능함. docker-compose의 `healthcheck` 설정과도 연동 가능
+  - **비고**: 응답 형식 예시 — `{"status": "ok", "redis": "ok", "postgres": "ok", "worker": "running"}`. 의존 서비스 연결 실패 시 HTTP 503 반환
+  - **산출물**: `internal/api/handler.go` 수정 (`GET /health` 핸들러 추가)
+
 - [ ] **Task 7-1-3. 핸들러 integration test 작성**
   - **무엇**: `httptest`를 사용해 각 엔드포인트의 요청/응답 검증
   - **왜**: API 계층 변경 시 하위 호환성 깨짐을 조기에 감지
@@ -779,10 +808,26 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 7-4. Admin / Debug API
 
-- [ ] **Task 7-4-1. Admin 엔드포인트 구현**
-  - **무엇**: 최근 task 목록, 실패 task 조회, session dump, tool 호출 통계 엔드포인트
-  - **왜**: 운영 중 문제를 API로 조회할 수 없으면 디버깅이 로그 grep에만 의존하게 됨
+- [ ] **Task 7-4-1. 최근 task 목록 엔드포인트 구현**
+  - **무엇**: `GET /v1/admin/tasks` — 최근 N개 AsyncTask 목록 반환 (상태, 생성 시각, 소요 시간 포함)
+  - **왜**: 운영 중 task 처리 현황을 API로 확인하는 가장 기본적인 수단. 로그 grep 없이 처리량과 상태 분포를 파악할 수 있음
   - **산출물**: `internal/api/admin_handler.go`
+
+- [ ] **Task 7-4-2. 실패 task 조회 엔드포인트 구현**
+  - **무엇**: `GET /v1/admin/tasks/failed` — `failed` 상태의 AsyncTask만 필터링해 에러 메시지 포함 반환
+  - **왜**: 실패 task를 별도 조회할 수 없으면 모든 task 목록에서 수동으로 찾아야 함. 에러 유형별 패턴 파악이 어려워짐
+  - **산출물**: `internal/api/admin_handler.go` 수정
+
+- [ ] **Task 7-4-3. session dump 엔드포인트 구현**
+  - **무엇**: `GET /v1/admin/sessions/{id}` — 지정 SessionID의 SessionState 전체 내용 반환
+  - **왜**: 특정 session의 상태를 API로 덤프할 수 없으면 session 관련 버그(맥락 누락, 잘못된 복원) 디버깅이 코드 변경 없이 불가능함
+  - **산출물**: `internal/api/admin_handler.go` 수정
+
+- [ ] **Task 7-4-4. tool 호출 통계 엔드포인트 구현**
+  - **무엇**: `GET /v1/admin/stats/tools` — tool 이름별 호출 횟수, 평균 latency, 에러율 반환. 통계는 in-memory 누적 (프로세스 재시작 시 초기화)
+  - **왜**: 어떤 tool이 자주 실패하거나 느린지 확인하지 못하면 Phase 8 per-tool timeout 설정 최적화에 데이터 근거가 없음
+  - **비고**: 집계 구조체는 `tool_stats.go`에 분리. Phase 8 OTel 연동 후 이 통계는 메트릭으로 대체될 수 있음
+  - **산출물**: `internal/api/admin_handler.go` 수정, `internal/api/tool_stats.go`
 
 ### Step 7-5. ask_user 비동기 처리
 
@@ -805,6 +850,9 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - Worker가 queue에서 task를 꺼내 `runtime.Run()`을 호출하고 결과를 저장소에 영속화 확인
 - 프로세스 재시작 후 `GET /v1/tasks/{id}`로 이전 task 결과 조회 가능 확인
 - `httptest` 기반 handler integration test 통과 (`go test ./internal/api/...`)
+- `GET /health` 엔드포인트가 Redis/Postgres/Worker 상태를 반환하고, 의존 서비스 장애 시 HTTP 503 반환 확인
+- `GET /v1/admin/tasks`로 최근 task 목록 조회, `GET /v1/admin/tasks/failed`로 실패 task 필터링 조회 확인
+- `GET /v1/admin/stats/tools`로 tool별 호출 횟수 및 에러율 조회 확인
 - `ask_user` ActionType 발생 시 task가 `waiting_for_user` 상태로 전환되고, `POST /v1/tasks/{id}/input`으로 입력 제출 후 task가 재개되는 것 확인
 - 해당 Phase의 주요 설계 결정을 `docs/decisions/phase7.md`에 기록
 
@@ -839,10 +887,11 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 8-3. Observability
 
-- [ ] **Task 8-3-1. structured logging + trace ID 적용**
-  - **무엇**: 모든 로그에 trace ID를 포함하는 logger 래퍼
-  - **왜**: trace ID 없이는 multi-agent 시나리오에서 요청 단위 로그 추적 불가
-  - **산출물**: `internal/observability/logger.go`
+- [ ] **Task 8-3-1. Logger에 OTel span trace ID 연동**
+  - **무엇**: Phase 3(Task 3-6-1)에서 만든 structured logger의 `trace_id` 필드를 OTel span의 TraceID/SpanID로 교체. `context.Context`에서 span을 꺼내 logger 필드에 자동 주입하도록 수정
+  - **왜**: Phase 3의 logger는 request_id 기반의 자체 trace_id를 사용함. OTel 연동 이후에는 span TraceID가 trace의 단일 기준이 되어야 Jaeger 등 외부 트레이서와 로그가 같은 ID로 연결됨
+  - **비고**: logger 인터페이스는 변경하지 않음 — 내부 구현에서 span을 꺼내는 방식으로만 수정. Task 8-3-2(OTel SDK 초기화)가 완료된 이후에 진행
+  - **산출물**: `internal/observability/logger.go` 수정
 
 - [ ] **Task 8-3-2. OpenTelemetry SDK 초기화**
   - **무엇**: `TracerProvider` 초기화, exporter 설정(stdout 또는 OTLP), SDK bootstrap 코드 작성. `docker-compose.yml`에 Jaeger 또는 OTEL Collector 컨테이너 추가
