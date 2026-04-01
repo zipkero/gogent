@@ -257,10 +257,9 @@ Phase 2  Tool + ToolRegistry + ToolRouter + 구체 Tool 구현 + AgentError
 Phase 3  LLMClient + LLMPlanner + ToolExecutor (ToolRouter 실제 연결)
 Phase 4  SessionState + WorkingMemory + LongTermMemory + MemoryManager
 Phase 5  Verifier + RetryPolicy + FailureHandler
-Phase 6  Test Harness (MockLLMClient + AgentHarness + Scenario)
-Phase 7  Task + Workflow + ManagerAgent + WorkerAgent
-Phase 8  HTTP API + AsyncTaskQueue + Worker
-Phase 9  Timeout + CostPolicy + Observability + PolicyLayer
+Phase 6  Task + Workflow + ManagerAgent + WorkerAgent
+Phase 7  HTTP API + AsyncTaskQueue + Worker
+Phase 8  Timeout + CostPolicy + Observability + PolicyLayer
 ```
 
 각 Phase는 이전 Phase의 컴포넌트를 교체하거나 확장하는 방식으로 진행된다.
