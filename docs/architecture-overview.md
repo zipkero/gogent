@@ -283,16 +283,18 @@ planner → state  (Planner.Plan 인자 타입 때문에)
 `PlanResult`는 `planner.Plan()` 호출 직후 `executor.Execute()`로 넘기면 충분하다.
 loop 내에서 소비되고 사라지므로 state에 저장할 필요가 없다.
 
-**Phase 3 예정: `internal/types` 패키지로 분리**
+**Phase 2 완료: `internal/types` 패키지로 분리**
 
-LLMPlanner가 도입되면 "이전 step에서 무엇을 결정했는지"를 Planner가 참고해야 한다.
-그 시점에 `PlanResult`를 `internal/types`로 이동하면 순환 없이 `AgentState`에 포함 가능하다.
+`ActionType`, `PlanResult`, `ToolResult`를 `internal/types`로 이동했다.
+Phase 3에서 `AgentState.CurrentPlan types.PlanResult` 필드를 추가할 때 순환 참조 없이 가능하다.
 
 ```
-internal/types   ← PlanResult, ToolResult 등 공유 타입
+internal/types    ← (다른 internal 패키지 참조 없음)
 internal/state   → types
 internal/planner → types, state
-internal/executor → types, state
+internal/executor → types
+internal/tools   → types, agent
+internal/agent   → types, state, planner, executor
 ```
 
 ### ToolRouter와 ToolRegistry 분리 (Phase 2)
