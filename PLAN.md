@@ -36,17 +36,40 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: 환경변수가 없을 때 런타임 중간에 터지는 것을 방지
   - **산출물**: `internal/config/config.go`
 
+- [ ] **Task 0-2-4. Makefile 기본 타겟 추가**
+  - **무엇**: `make build`(`go build ./...`), `make test`(`go test ./...`), `make vet`(`go vet ./...`) 타겟 작성
+  - **왜**: Phase 1부터 반복 실행하는 명령을 표준화해야 Phase 4에서 `make test-unit`/`make test-integration` 타겟을 추가할 때 기반이 됨. 지금 만들어두지 않으면 Phase 1~3에서 명령을 매번 직접 입력하거나, Phase 4에서 처음부터 Makefile을 작성하게 됨
+  - **비고**: Phase 4 Task 4-0-1에서 이 Makefile에 `test-unit`/`test-integration` 타겟만 추가하면 됨
+  - **산출물**: `Makefile`
+
 ### Step 0-3. 프로젝트 초기화
 
 - [x] **Task 0-3-1. 디렉터리 구조 생성**
-  - **무엇**: `cmd/agent-cli/`, `internal/agent/`, `internal/planner/`, `internal/executor/`, `internal/state/`, `internal/tools/`, `docs/` 생성
-  - **왜**: 경계를 디렉터리로 물리적으로 분리해두어야 이후 패키지 간 의존 방향을 강제할 수 있음
+  - **무엇**: 아래 디렉터리 전체를 한 번에 생성
+    - `cmd/agent-cli/` — Phase 1 CLI 진입점
+    - `cmd/agent-api/` — Phase 7 HTTP API 서버 진입점 (미리 생성, Phase 7까지 빈 stub)
+    - `internal/agent/`, `internal/planner/`, `internal/executor/`, `internal/state/`, `internal/tools/`, `internal/types/`
+    - `internal/memory/` — Phase 4 Session + Long-term memory
+    - `internal/verifier/` — Phase 5 Verifier + Reflector
+    - `internal/observability/` — Phase 3 structured logger, Phase 8 OTel
+    - `internal/orchestration/` — Phase 6 Multi-agent
+    - `internal/api/` — Phase 7 HTTP 핸들러 + AsyncTask
+    - `internal/queue/` — Phase 7 TaskQueue + Worker
+    - `internal/config/`, `internal/llm/`
+    - `testutil/` — 테스트 전용 mock (프로덕션 코드에서 import 금지)
+    - `docs/`, `docs/decisions/`, `docs/scenarios/`
+  - **왜**: 경계를 디렉터리로 물리적으로 분리해두어야 이후 패키지 간 의존 방향을 강제할 수 있음. 나중에 추가하면 stub 생성 없이 구현부터 작성하게 되어 go build가 이미 깨진 시점에 경계 위반을 발견하게 됨
   - **산출물**: 디렉터리 트리
 
 - [x] **Task 0-3-2. 각 패키지 stub 파일 생성 + go build 통과**
-  - **무엇**: 각 디렉터리에 `package` 선언만 있는 빈 `.go` 파일 생성
-  - **왜**: `go build ./...` 통과 여부로 패키지 경계가 올바른지 확인
+  - **무엇**: Task 0-3-1에서 생성한 모든 디렉터리에 `package` 선언만 있는 빈 `.go` 파일 생성. `testutil/`은 `package testutil`로 선언
+  - **왜**: `go build ./...` 통과 여부로 패키지 경계가 올바른지 확인. stub이 없으면 나중에 추가하는 패키지가 경계 규칙을 처음부터 지키는지 검증 불가
   - **산출물**: 각 패키지의 빈 stub 파일
+
+- [ ] **Task 0-3-3. go.mod Go 버전 확정**
+  - **무엇**: `go.mod`의 Go 버전을 **1.22 이상**으로 명시적으로 고정. `go version` 로컬 확인 후 `go mod tidy` 실행
+  - **왜**: Phase 7에서 `net/http` ServeMux의 path parameter(`{id}`) 지원이 Go 1.22부터 가능함. 지금 버전을 고정하지 않으면 Phase 7에서 라우터를 통째로 교체해야 하는 상황이 생길 수 있음. Phase 0에서 확정해야 이후 모든 Phase가 동일한 환경을 전제할 수 있음
+  - **산출물**: `go.mod` Go 버전 1.22+ 확인 및 필요 시 업데이트
 
 ### Step 0-4. 용어 정리
 
@@ -269,6 +292,20 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ## Phase 3 — Planner 고도화 / LLM 연결
 
+### Step 3-0. Phase 3 사전 준비
+
+- [ ] **Task 3-0-1. AgentState에 CurrentPlan 필드 추가**
+  - **무엇**: `internal/state/agent_state.go`에 `CurrentPlan types.PlanResult` 필드 추가. Phase 2 Task 2-7-1에서 `PlanResult`가 `internal/types`로 이동되어 있으므로 `state → types` 의존만 발생함(순환 없음)
+  - **왜**: Phase 1 Task 1-2-3 비고에서 "순환 참조 방지를 위해 Phase 3에서 internal/types로 해결 예정"이라고 명시됐음. `AgentState.CurrentPlan`이 없으면 Runtime loop가 직전 플래닝 결과를 state에 저장하지 못하고, LLMPlanner의 prompt_builder가 "이미 시도한 action"을 system prompt에 포함할 수 없음
+  - **비고**: `go build ./...` + `go test ./...` 전체 통과 확인 후 Task 3-0-2로 진행. `Runtime.Run()` loop의 `④ AgentState 반영` 단계에서 `state.CurrentPlan = plan` 대입 로직도 함께 추가
+  - **산출물**: `internal/state/agent_state.go` 수정, `internal/agent/runtime.go` 수정 (CurrentPlan 대입)
+
+- [ ] **Task 3-0-2. Phase 3 LLM 연동 테스트 전략 수립**
+  - **무엇**: Phase 3에서 실제 OpenAI API를 호출하는 테스트 파일에 `//go:build integration` 태그 적용 규칙을 Phase 4(Task 4-0-1)보다 앞당겨 먼저 수립. `Makefile`의 기존 `make test` 타겟이 integration 테스트를 제외하도록 `-tags integration` 제외 옵션 추가
+  - **왜**: Task 3-4-1(OpenAI LLMClient)과 Phase 3 Exit Criteria의 "LLMPlanner → OpenAI API 호출 end-to-end 확인"은 실제 API 키가 필요함. 이를 일반 `go test ./...` 에 포함시키면 API 키 없는 환경(CI, 다른 개발 머신)에서 즉시 실패함. Phase 4 Task 4-0-1보다 먼저 규칙을 적용해야 Phase 3 파일부터 일관성이 생김
+  - **비고**: Phase 4 Task 4-0-1은 이 Task에서 수립한 규칙 위에 `make test-integration` 타겟만 추가하면 됨. GitHub Actions CI(Phase 9 Task 9-0-1)는 `make test`(unit only)만 실행
+  - **산출물**: `Makefile` 수정 (`make test` 타겟에 `-tags` 제외 옵션 추가)
+
 ### Step 3-1. ActionType 확장
 
 - [ ] **Task 3-1-1. ActionType 상수 2개 추가**
@@ -282,12 +319,18 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: ActionType을 추가하면 Runtime loop에서 반드시 처리 분기가 있어야 함. 누락 시 `summarize`를 받은 루프가 정의되지 않은 동작을 함
   - **산출물**: `internal/agent/runtime.go` 수정
 
+- [ ] **Task 3-1-3. Runtime loop에 `ask_user` ActionType 처리 분기 추가**
+  - **무엇**: `Runtime.Run()` loop에서 ActionType이 `ask_user`일 때, `FinalAnswer`에 LLM이 생성한 질문 문자열을 채우고 `respond_directly`와 동일하게 loop를 즉시 종료하는 분기 추가
+  - **왜**: Task 3-1-1 비고에 "CLI 환경에서 ask_user → respond_directly로 대체 처리(loop 종료)"를 정책으로 명시했지만 구현 Task가 없었음. 이 분기가 없으면 LLMPlanner가 `ask_user`를 선택했을 때 loop가 undefined behavior를 보임
+  - **비고**: HTTP API 환경에서의 비동기 대기 메커니즘은 Phase 7 Task 7-5-1에서 구현. 이 Task는 CLI 경로만 대상으로 함
+  - **산출물**: `internal/agent/runtime.go` 수정
+
 ### Step 3-2. PlanResult 스키마 고정
 
 - [ ] **Task 3-2-1. PlanResult struct 확장**
   - **무엇**: `ReasoningSummary`, `Confidence`, `NextGoal` 필드 추가, JSON 태그 정의
   - **왜**: LLM이 structured output으로 반환할 때 파싱 기준이 되는 타입. 이 시점에 고정하지 않으면 LLM planner 구현 중 계속 바뀜
-  - **산출물**: `internal/planner/plan_result.go` 수정
+  - **산출물**: `internal/types/plan_result.go` 수정 (Phase 2 Task 2-7-1에서 이동됨. `internal/planner/plan_result.go` 아님)
 
 - [ ] **Task 3-2-2. PlanResult JSON schema 문자열 작성**
   - **무엇**: system prompt에 삽입할 JSON schema 문자열 상수 또는 생성 함수
@@ -307,7 +350,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 3-4-1. OpenAI LLMClient 구현**
   - **무엇**: `LLMClient` 인터페이스를 구현하는 OpenAI API 클라이언트
   - **왜**: Phase 0에서 정의한 인터페이스의 실제 구현체. 이것이 있어야 LLMPlanner가 동작함
-  - **비고**: LLM API 호출 시 `context.WithTimeout`으로 per-call deadline 설정 필수. timeout 없이는 LLM 응답 지연 시 goroutine이 무기한 대기함. Phase 9(Task 8-1-2)의 전체 request deadline과 별개로, 개별 LLM 호출 단위 timeout을 이 시점에 적용
+  - **비고**: LLM API 호출 시 `context.WithTimeout`으로 per-call deadline 설정 필수. timeout 없이는 LLM 응답 지연 시 goroutine이 무기한 대기함. Phase 8(Task 8-1-2)의 전체 request deadline과 별개로, 개별 LLM 호출 단위 timeout을 이 시점에 적용
   - **산출물**: `internal/llm/openai_client.go`
 
 - [ ] **Task 3-4-2. system prompt 빌더 구현**
@@ -320,11 +363,11 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: mock planner를 실제 LLM 기반으로 교체하는 핵심 단계
   - **산출물**: `internal/planner/llm_planner.go`
 
-- [ ] **Task 3-4-4. ToolExecutor 구현 — MockExecutor 대체**
-  - **무엇**: `internal/executor/tool_executor.go` 구현. `Execute(ctx, PlanResult)`에서 `ToolRouter.Route()`를 실제로 호출하는 Executor. Phase 1의 MockExecutor를 이 구현체로 교체
+- [ ] **Task 3-4-4. ToolExecutor 구현**
+  - **무엇**: `internal/executor/tool_executor.go` 구현. `Execute(ctx, PlanResult)`에서 `ToolRouter.Route()`를 실제로 호출하는 Executor. `cmd/agent-cli/main.go`의 Runtime 조립 시 ToolExecutor를 주입하도록 변경
   - **왜**: `architecture-overview.md`에 "Phase 3: ToolExecutor (ToolRouter 실제 연결)"이 명시되어 있음. LLMPlanner가 tool_call PlanResult를 반환해도 MockExecutor가 그대로라면 실제 tool이 실행되지 않아 end-to-end 검증이 불가능함
-  - **비고**: ToolRouter는 Phase 2에서 이미 완성됨. 이 Task의 핵심은 Executor 인터페이스를 유지하면서 내부를 ToolRouter 위임으로 교체하는 것
-  - **산출물**: `internal/executor/tool_executor.go`
+  - **비고**: ToolRouter는 Phase 2에서 이미 완성됨. MockExecutor는 삭제하지 않고 테스트용으로 유지한다 — `runtime_test.go`를 포함한 기존 단위 테스트는 MockExecutor를 계속 주입해 사용하며, 운영 경로(`main.go`)에서만 ToolExecutor로 전환함
+  - **산출물**: `internal/executor/tool_executor.go`, `cmd/agent-cli/main.go` 수정
 
 - [ ] **Task 3-4-5. invalid JSON 재시도 로직 구현**
   - **무엇**: JSON 파싱 실패 시 LLM 재호출 1회 후 에러 반환
@@ -358,8 +401,15 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 3-6-1. Logger 인터페이스 및 기본 구현체 작성**
   - **무엇**: `trace_id`, `session_id`, `request_id`를 기본 필드로 포함하는 structured logger 래퍼. Go 표준 `log/slog` 기반으로 JSON 출력 형식 지원
   - **왜**: Phase 3에서 LLM 호출이 시작되면 어떤 요청이 어떤 플래너 결정을 내렸는지 로그 없이 추적이 불가능하다. Phase 8의 OTel span 연동 전까지의 디버깅 기반을 이 시점에 확보해야 Phase 4~7에서 실질적으로 활용 가능함
-  - **비고**: `log/slog`는 Go 1.21 표준 패키지이므로 외부 의존 없음. Phase 8 Task 8-3-1은 이 logger에 OTel span trace ID를 연동하는 것으로 범위가 조정됨. LLMPlanner, ToolRouter, Runtime의 주요 진입/종료 지점에서 이 logger를 사용하도록 교체
+  - **비고**: `log/slog`는 Go 1.21 표준 패키지이므로 외부 의존 없음. Phase 8 Task 8-3-2는 이 logger에 OTel span trace ID를 연동하는 것으로 범위가 조정됨 (8-3-1은 OTel SDK 초기화, 8-3-2가 logger 연동). LLMPlanner, ToolRouter, Runtime의 주요 진입/종료 지점에서 이 logger를 사용하도록 교체
   - **산출물**: `internal/observability/logger.go`
+
+### Step 3-7. 설계 결정 문서화
+
+- [ ] **Task 3-7-1. Phase 3 설계 결정 기록**
+  - **무엇**: LLMPlanner 구현 방식, PlanResult JSON schema 설계 근거, hallucination 방어 전략, structured logger 도입 배경을 `docs/decisions/phase3.md`에 기록
+  - **왜**: 코드만으로는 "왜 이렇게 설계했는지"가 드러나지 않음. 특히 LLMPlanner의 retry 정책(Phase 5에서 RetryPolicy로 교체 예정)과 hallucination 방어의 설계 근거는 나중에 되돌아볼 때 중요한 기준점이 됨
+  - **산출물**: `docs/decisions/phase3.md`
 
 ### Phase 3 Exit Criteria
 
@@ -367,13 +417,28 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - ToolExecutor가 LLMPlanner의 tool_call 결과를 받아 실제 ToolRouter를 통해 tool 실행 확인 (end-to-end)
 - invalid JSON 응답 시 1회 재시도 후 에러 처리 확인
 - hallucinated tool name 방어 (registry에 없는 tool 이름 → 에러) 확인
+- `ask_user` ActionType 발생 시 loop가 즉시 종료되고 FinalAnswer에 질문 문자열이 채워지는 것 확인 (CLI 경로)
 - TokenUsage 로그 출력 확인 (request_id, prompt_tokens, completion_tokens)
 - 모든 LLM 호출 및 tool 실행 로그에 trace_id, session_id, request_id 포함 확인 (structured logger)
-- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase3.md`에 기록
+- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase3.md`에 기록 (Task 3-7-1)
 
 ---
 
 ## Phase 4 — Session / State / Memory 분리
+
+### Step 4-0. 통합 테스트 인프라 준비
+
+- [ ] **Task 4-0-1. 통합 테스트 타겟 추가**
+  - **무엇**: Phase 0 Task 0-2-4에서 만든 `Makefile`에 `make test-unit`(`go test ./...`, integration 태그 제외)과 `make test-integration`(`go test -tags integration ./...`, `docker-compose up` 전제) 타겟 추가. `README.md`에 로컬 실행 전제 조건 명시
+  - **왜**: Phase 4부터 Redis/Postgres 실제 연결이 필요한 통합 테스트가 등장함. `//go:build integration` 태그 규칙 자체는 Phase 3 Task 3-0-2에서 이미 수립됨. 이 Task는 인프라 의존 테스트용 `make test-integration` 타겟 추가에 집중
+  - **비고**: Phase 4, 5, 7의 통합 테스트 파일 작성 시마다 파일 상단에 `//go:build integration` 태그 적용. GitHub Actions CI(Phase 9 Task 9-0-1)는 `make test-unit`만 실행
+  - **산출물**: `Makefile` 수정 (test-unit/test-integration 타겟 추가), `README.md` 일부 갱신
+
+- [ ] **Task 4-0-2. Redis/Postgres 클라이언트 의존성 추가**
+  - **무엇**: `go get github.com/redis/go-redis/v9`(또는 동등한 Redis 클라이언트)와 `go get github.com/jackc/pgx/v5`(또는 동등한 Postgres 드라이버) 실행 후 `go mod tidy`
+  - **왜**: Task 4-2-4(RedisSessionRepository)와 Task 4-4-3(PostgresMemoryRepository) 구현 전에 의존성이 `go.mod`에 없으면 구현 파일 작성 즉시 빌드가 깨짐. 두 Task 직전에 한 번에 추가하는 것보다 Phase 4 진입 시 먼저 추가해야 이후 모든 Task의 `go build ./...` 확인이 일관됨
+  - **비고**: 특정 라이브러리가 아닌 인터페이스 기준 구현이므로 클라이언트 선택은 구현자 재량. 단, 선택한 라이브러리와 버전을 이 Task 완료 시 기록할 것
+  - **산출물**: `go.mod`, `go.sum` 갱신
 
 ### Step 4-1. Request State
 
@@ -423,10 +488,10 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 ### Step 4-3. Working Memory
 
 - [ ] **Task 4-3-0. ToolResult에 ToolKind 필드 추가**
-  - **무엇**: `internal/state/tool_result.go`의 ToolResult struct에 `Kind string` 필드 추가. 각 Tool 구현체(`search_mock`, `calculator` 등)가 Execute() 반환 시 Kind 값을 채우도록 수정. Kind 상수(`tool_kind_search`, `tool_kind_calculator` 등)는 `internal/state` 또는 `internal/tools` 패키지에 정의
+  - **무엇**: `internal/types/tool_result.go`의 ToolResult struct에 `Kind string` 필드 추가. 각 Tool 구현체(`search_mock`, `calculator` 등)가 Execute() 반환 시 Kind 값을 채우도록 수정. Kind 상수(`tool_kind_search`, `tool_kind_calculator` 등)는 `internal/types` 패키지에 정의
   - **왜**: Task 4-3-2에서 Runtime이 ToolResult를 WorkingMemory의 `SearchResults / FilteredResults / Summaries` 필드로 분류 저장하려면 ToolResult에 유형 정보가 있어야 함. 이 필드 없이는 Runtime이 어떤 기준으로 분류할지 판단할 수 없음
-  - **비고**: ToolResult를 소비하는 runtime.go, router.go, mock_executor.go, 각 테스트 파일에 컴파일 오류가 없는지 `go build ./...`로 확인 후 Task 4-3-1로 진행
-  - **산출물**: `internal/state/tool_result.go` 수정, 각 Tool 구현체(`internal/tools/*/`) 수정
+  - **비고**: ToolResult를 소비하는 runtime.go, router.go, mock_executor.go, 각 테스트 파일에 컴파일 오류가 없는지 `go build ./...`로 확인 후 Task 4-3-1로 진행. (Phase 2 Task 2-7-1에서 `internal/state` → `internal/types`로 이동됨. `internal/state/tool_result.go` 아님)
+  - **산출물**: `internal/types/tool_result.go` 수정, 각 Tool 구현체(`internal/tools/*/`) 수정
 
 - [ ] **Task 4-3-1. WorkingMemory struct 정의**
   - **무엇**: SearchResults, FilteredResults, Summaries 필드를 갖는 struct
@@ -444,13 +509,25 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 4-4-1. Memory struct 정의**
   - **무엇**: ID, UserID, Content, Tags, CreatedAt 필드를 갖는 struct
   - **왜**: Postgres에 저장할 레코드 단위의 타입 정의
-  - **산출물**: `internal/memory/memory.go`
+  - **비고**: `Memory` struct는 `internal/types/memory.go`에 정의한다. `internal/state`에서 `AgentState.RelevantMemories []types.Memory` 필드를 사용하려면 `state → memory` 의존이 생기므로 `internal/types`가 유일한 경계 안전 위치임. PlanResult, ToolResult와 동일한 이유 (Phase 2 Task 2-7-1 참고)
+  - **산출물**: `internal/types/memory.go` (`internal/memory/memory.go` 아님)
 
 - [ ] **Task 4-4-2. MemoryRepository 인터페이스 정의**
   - **무엇**: `Save(ctx, Memory) error`, `LoadByTags(ctx, tags []string, limit int) ([]Memory, error)` 인터페이스
   - **왜**: Postgres 의존을 런타임 코드에서 격리. 테스트 시 in-memory로 교체 가능. 조회 방식을 태그+limit으로 고정해야 나중에 embedding 검색으로 교체할 때 인터페이스 변경 범위가 명확해짐
   - **비고**: `LoadByTags`는 **OR 조건** (태그 중 하나라도 포함된 항목 조회). AND 조건은 결과가 지나치게 좁아져 실용성이 없음. Phase 9에서 embedding 검색으로 교체 시 인터페이스 시그니처는 유지하되 내부 구현만 교체
   - **산출물**: `internal/memory/memory_repository.go`
+
+- [ ] **Task 4-4-2-b. InMemoryMemoryRepository 구현**
+  - **무엇**: 슬라이스 기반 MemoryRepository 구현체. `Save`는 슬라이스에 append, `LoadByTags`는 OR 조건(`tags` 중 하나라도 일치)으로 필터링 후 limit 적용
+  - **왜**: SessionRepository가 InMemory → Redis 순서를 따른 것과 동일한 이유. PostgresMemoryRepository(Task 4-4-3)가 완성되기 전에 `search_memory` tool(Task 4-5-3)과 MemoryManager(Task 4-5-2)를 단위 테스트하려면 Postgres 없이 동작하는 구현체가 필요함
+  - **산출물**: `internal/memory/in_memory_memory_repository.go`
+
+- [ ] **Task 4-4-2-c. Postgres 스키마 초기화 코드 작성**
+  - **무엇**: 앱 시작 시 `memories` 테이블(`id UUID`, `user_id TEXT`, `content TEXT`, `tags TEXT[]`, `created_at TIMESTAMPTZ`)과 태그 검색용 GIN 인덱스를 `CREATE TABLE IF NOT EXISTS`로 생성하는 `migrate` 함수 작성
+  - **왜**: Task 4-4-3에서 PostgresMemoryRepository를 구현하기 전에 테이블이 없으면 실행 자체가 불가능함. 새 마이그레이션 라이브러리 의존 없이 Go 표준 `database/sql`로 처리하는 방식을 사용해 커리큘럼 학습 목표에 집중
+  - **비고**: `internal/memory/migrate.go`에 `Migrate(db *sql.DB) error` 함수로 작성. `cmd/agent-cli/main.go` 또는 앱 초기화 경로에서 DB 연결 직후 호출. Phase 9에서 포트폴리오화 시 `golang-migrate` 전환을 검토할 수 있음
+  - **산출물**: `internal/memory/migrate.go`
 
 - [ ] **Task 4-4-3. PostgresMemoryRepository 구현**
   - **무엇**: Postgres에 Memory를 저장하고 `LoadByTags`를 태그 배열 **OR 조건** (`WHERE tags && $1`) + LIMIT으로 구현하는 구현체
@@ -474,13 +551,26 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: runtime은 MemoryManager만 알면 되고 구체 저장소는 주입으로 교체 가능
   - **산출물**: `internal/memory/default_memory_manager.go`
 
+- [ ] **Task 4-5-3. `search_memory` tool 구현**
+  - **무엇**: `query` 문자열을 입력받아 `MemoryManager.LoadRelevantMemory()`를 호출하고 결과를 ToolResult로 반환하는 tool 구현 및 Registry 등록
+  - **왜**: Task 3-1-1 비고에서 "`search_memory`는 ActionType이 아닌 Tool로 구현(Registry에 등록)"으로 결정했지만 구현 Task가 없었음. Registry에 등록되어야 LLMPlanner가 tool_call로 선택 가능하며, Phase 4의 Long-term Memory 피드백 루프가 실제로 닫힘
+  - **비고**: MemoryManager를 tool 생성 시 주입받는 방식으로 구현해 `internal/tools/search_memory` 패키지가 `internal/memory` 패키지에 직접 의존하지 않도록 한다 (인터페이스 주입). `docs/tools.md`에 spec 추가
+  - **산출물**: `internal/tools/search_memory/search_memory.go`, `docs/tools.md` 수정
+
 ### Step 4-6. Long-term Memory → Planner 피드백 연결
 
 - [ ] **Task 4-6-1. prompt_builder에 Long-term Memory 반영**
   - **무엇**: `internal/planner/prompt_builder.go`를 수정해, `MemoryManager.LoadRelevantMemory()`로 조회한 결과를 system prompt의 context 섹션에 포함하는 로직 추가. Runtime이 Planner 호출 전 `MemoryManager.LoadRelevantMemory()`를 호출하고 결과를 `AgentState`에 임시 저장하거나 prompt_builder에 직접 전달하는 경로 구현
   - **왜**: Phase 4에서 Long-term Memory를 저장하지만 LLMPlanner의 system prompt에 반영되지 않으면 메모리가 "저장은 되지만 활용되지 않는" dead code가 됨. 저장 → 조회 → 프롬프트 반영 경로가 Phase 4 내에서 닫혀야 함
-  - **비고**: `AgentState`에 `RelevantMemories []Memory` 필드를 추가하고 Runtime에서 채운 뒤 prompt_builder가 참조하는 방식 권장. 이렇게 하면 prompt_builder가 MemoryManager에 직접 의존하지 않아 패키지 경계가 유지됨
+  - **비고**: `AgentState`에 `RelevantMemories []types.Memory` 필드를 추가하고 Runtime에서 채운 뒤 prompt_builder가 참조하는 방식 권장. `Memory` struct가 `internal/types`에 있으므로 `state → types` 의존만 발생하며 패키지 경계 규칙을 위반하지 않음 (Task 4-4-1에서 `internal/types/memory.go`로 정의). prompt_builder가 MemoryManager에 직접 의존하지 않아 패키지 경계가 유지됨
   - **산출물**: `internal/agent/runtime.go` 수정 (MemoryManager 호출 경로 추가), `internal/state/agent_state.go` 수정 (RelevantMemories 필드), `internal/planner/prompt_builder.go` 수정
+
+### Step 4-7. 설계 결정 문서화
+
+- [ ] **Task 4-7-1. Phase 4 설계 결정 기록**
+  - **무엇**: RequestState/SessionState/WorkingMemory 분리 근거, Memory struct의 `internal/types` 배치 결정, MemoryManager 파사드 패턴 선택 이유, RedisSessionRepository AOF 설정 배경을 `docs/decisions/phase4.md`에 기록
+  - **왜**: 상태 분리 경계 결정은 Phase 6 multi-agent와 Phase 7 서비스화에서 계속 영향을 미침. 특히 `internal/types` 공유 타입 확장 이력이 문서에 없으면 나중에 경계 위반을 모르고 추가할 수 있음
+  - **산출물**: `docs/decisions/phase4.md`
 
 ### Phase 4 Exit Criteria
 
@@ -490,7 +580,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - Redis 재시작 후 세션 복원 확인 (RedisSessionRepository)
 - Memory 저장 후 태그 OR 조건 조회 결과 확인
 - Long-term Memory 조회 결과가 LLMPlanner system prompt에 반영되어 다음 응답에 영향을 주는 것 확인
-- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase4.md`에 기록
+- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase4.md`에 기록 (Task 4-7-1)
 
 ---
 
@@ -501,14 +591,14 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 5-1-1. context.WithTimeout을 이용한 tool 실행 단위 timeout 적용**
   - **무엇**: ToolRouter.Route() 호출 시 per-tool timeout을 context에 적용하는 구현. context 취소 시 goroutine이 정리되는 패턴 포함
   - **왜**: Phase 3에서 LLM 호출이 시작된 이후 deadline 없이 운용되고 있음. tool 실행 단위부터 timeout을 적용해야 Phase 7 병렬 실행에서 goroutine leak이 발생하지 않으며, 이 패턴을 Phase 9 전체 request deadline(Task 8-1-2)의 기반으로 사용
-  - **비고**: Phase 9의 Task 8-1-1(per-tool timeout)과 역할이 겹치지 않도록 이 Task는 "context 전달 패턴 확립"에 집중하고, Phase 9에서 설정값 외부화를 담당
+  - **비고**: Phase 8의 Task 8-1-1(per-tool timeout)과 역할이 겹치지 않도록 이 Task는 "context 전달 패턴 확립"에 집중하고, Phase 8에서 설정값 외부화를 담당
   - **산출물**: `internal/tools/router.go` 수정 (context deadline 전달), `internal/agent/concurrency_test.go` (동작 검증 테스트)
 
-- [ ] **Task 5-1-2. errgroup을 사용한 병렬 tool 실행 실습**
-  - **무엇**: `golang.org/x/sync/errgroup`을 사용해 독립적인 tool 2개를 goroutine으로 병렬 실행하고 결과를 병합하는 예제 구현. context 취소 시 in-flight goroutine 정리 패턴 포함
-  - **왜**: Phase 6의 Workflow 병렬 실행 엔진(Task 6-1-4b)과 Phase 7의 Worker goroutine 관리가 errgroup + WaitGroup 패턴을 전제로 함. 이 패턴을 Phase 5에서 단순한 tool 실행으로 먼저 실습하지 않으면 Phase 6에서 처음 마주치게 됨
+- [ ] **Task 5-1-2. errgroup 의존성 추가 및 병렬 tool 실행 실습**
+  - **무엇**: `go get golang.org/x/sync` 실행 후 `go mod tidy`. `errgroup`을 사용해 독립적인 tool 2개를 goroutine으로 병렬 실행하고 결과를 병합하는 예제 구현. context 취소 시 in-flight goroutine 정리 패턴 포함
+  - **왜**: Phase 6의 Workflow 병렬 실행 엔진(Task 6-1-4b)과 Phase 7의 Worker goroutine 관리가 errgroup + WaitGroup 패턴을 전제로 함. 이 패턴을 Phase 5에서 단순한 tool 실행으로 먼저 실습하지 않으면 Phase 6에서 처음 마주치게 됨. `golang.org/x/sync`는 외부 의존성이므로 go.mod에 없으면 Task 5-1-2 작성 즉시 빌드가 깨짐
   - **비고**: 결과물은 독립 실행 파일이 아닌 concurrency 패턴 검증용 테스트 코드로 작성. Phase 6 Task 6-1-4b 구현 시 이 패턴을 직접 참조
-  - **산출물**: `internal/agent/parallel_example_test.go`
+  - **산출물**: `go.mod`/`go.sum` 갱신, `internal/agent/parallel_example_test.go`
 
 ### Step 5-2. Verifier 인터페이스
 
@@ -606,13 +696,21 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: reflection이 state에 반영되지 않으면 loop 제어에 아무 영향도 주지 않음
   - **산출물**: `internal/agent/runtime.go` 수정
 
+### Step 5-6. 설계 결정 문서화
+
+- [ ] **Task 5-6-1. Phase 5 설계 결정 기록**
+  - **무엇**: Verifier/Reflector 역할 분리 근거, RetryPolicy 인터페이스 설계 결정, FailureHandler의 에러 유형별 분기 기준, Reflection과 Verification 순서 결정을 `docs/decisions/phase5.md`에 기록
+  - **왜**: Verifier(결과 검증)와 Reflector(LLM 자기검증)의 역할 경계는 직관적이지 않음. 이 결정이 문서화되지 않으면 Phase 6~7에서 새 컴포넌트 추가 시 어디에 검증 로직을 넣어야 할지 기준이 없어짐
+  - **산출물**: `docs/decisions/phase5.md`
+
 ### Phase 5 Exit Criteria
 
 - SimpleVerifier가 `done` / `retry` / `fail` 올바르게 분기 확인
 - RetryPolicy max 횟수 초과 시 loop 종료 확인
 - `tool_not_found` 에러 → fatal, `tool_execution_failed` 에러 → retry 분기 확인
 - `Sufficient=false` reflection 결과 시 loop 추가 진행 확인
-- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase5.md`에 기록
+- `go test -race ./internal/agent/...` 통과 확인 (concurrency 패턴 검증)
+- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase5.md`에 기록 (Task 5-6-1)
 
 ---
 
@@ -727,20 +825,47 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: multi-agent 시나리오는 단일 agent보다 흐름 추적이 복잡하므로 로그가 없으면 디버깅 불가
   - **산출물**: `internal/orchestration/trace.go`
 
+### Step 6-6. 설계 결정 문서화
+
+- [ ] **Task 6-6-1. Phase 6 설계 결정 기록**
+  - **무엇**: `orchestration → agent` 의존 방향 결정 근거, ManagerAgent vs Workflow 역할 분리 이유, Task 간 데이터 전달 방식(`TaskResult → 어댑터 → 다음 AgentState`), 실패 전파 방식 결정을 `docs/decisions/phase6.md`에 기록
+  - **왜**: orchestration 패키지 의존 방향은 Task 6-0-1에서 결정하지만 코드에는 드러나지 않음. Phase 7 서비스화에서 `orchestration.Task`와 `api.AsyncTask`를 구분해야 할 때 이 문서가 근거가 됨
+  - **산출물**: `docs/decisions/phase6.md`
+
 ### Phase 6 Exit Criteria
 
 - LLMTaskDecomposer가 사용자 입력을 Task 목록으로 분해 확인
 - 의존 관계 없는 Task가 goroutine으로 병렬 실행되는 것 확인
 - 의존 관계 있는 Task가 위상 정렬 순서대로 실행되는 것 확인
 - SearchAgent → FilterAgent → RankingAgent → SummaryAgent 호텔 검색 시나리오 E2E 통과
-- `go test ./internal/orchestration/...` 통과
-- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase6.md`에 기록
+- `go test -race ./internal/orchestration/...` 통과 확인 (Workflow 병렬 실행 goroutine race condition 없음)
+- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase6.md`에 기록 (Task 6-6-1)
 
 ---
 
 ## Phase 7 — Runtime 서비스화
 
 > **Kafka 도입 여부**: README 기술 스택에 Kafka가 "후반 확장 스택 (Phase 7~)"으로 언급되어 있으나, Phase 8에서는 InMemoryTaskQueue(buffered channel)로 대체한다. Kafka 도입은 Phase 8 완료 후 검증된 큐 인터페이스를 기반으로 선택적으로 추가할 수 있으며, 이 커리큘럼의 필수 범위가 아니다.
+
+### Step 7-0. 서비스화 사전 결정
+
+- [ ] **Task 7-0-1. HTTP 라우터 확인**
+  - **무엇**: Phase 0 Task 0-3-3에서 Go 1.22+로 이미 고정됨. 표준 `net/http` ServeMux의 path parameter(`{id}`) 지원이 사용 가능한 상태임을 확인하고 통과
+  - **왜**: Task 7-1-2에서 `GET /v1/tasks/{id}` 같은 path parameter 엔드포인트를 구현할 때 라우터 방식을 재확인하는 체크포인트
+  - **비고**: Go 버전 변경이 없다면 `go version`으로 확인만 하고 통과. 외부 라우터(`chi` 등)는 도입하지 않음
+  - **산출물**: 확인만 (산출물 없음)
+
+- [ ] **Task 7-0-2. cmd/agent-api 진입점 생성**
+  - **무엇**: `cmd/agent-api/main.go` 작성. HTTP 서버 초기화(포트 설정, graceful shutdown), 의존성 조립(Redis/Postgres 연결, MemoryManager, TaskQueue, Worker goroutine 시작, HTTP 핸들러 등록)을 담당하는 진입점
+  - **왜**: Phase 0 Task 0-3-1에서 `cmd/agent-api/` 디렉터리는 이미 생성됨. 그러나 HTTP 서버 진입점 구현 Task가 없으면 Task 7-1-2(핸들러 구현)를 완성해도 실제로 서버를 띄울 수 없음. `cmd/agent-cli/main.go`(CLI)는 계속 유지되며, 이 Task는 CLI와 독립적인 HTTP 서버 진입점을 추가하는 것
+  - **비고**: `cmd/agent-api/main.go`는 `SIGTERM`/`SIGINT` 수신 시 Worker graceful shutdown(Task 7-3-4)을 트리거하는 context cancel을 담당. Worker, TaskQueue, Handler 조립 순서: `InMemoryTaskQueue → Worker(queue, runtime, repo) → handler(queue, repo) → http.Server`
+  - **산출물**: `cmd/agent-api/main.go`
+
+- [ ] **Task 7-0-3. Admin 엔드포인트 인증 비목표 명시**
+  - **무엇**: `GET /v1/admin/*` 엔드포인트에 인증/인가를 **적용하지 않음**을 `docs/scope.md`에 명시
+  - **왜**: Phase 7의 admin API(`GET /v1/admin/tasks`, `GET /v1/admin/sessions/{id}` 등)는 민감한 내용을 반환하지만, 이 커리큘럼의 목적은 runtime 제어 흐름 학습이며 인증/인가는 비목표임. 명시하지 않으면 Phase 7 구현 시 "인증을 달아야 하나"라는 혼동이 생김
+  - **비고**: 실제 서비스화 시 반드시 인증이 필요하다는 경고 문구 포함
+  - **산출물**: `docs/scope.md` 수정
 
 ### Step 7-1. HTTP API
 
@@ -752,6 +877,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 7-1-2. HTTP 핸들러 구현**
   - **무엇**: `POST /v1/agent/run`, `GET /v1/tasks/{id}`, `GET /v1/sessions/{id}` 엔드포인트
   - **왜**: CLI 입력기를 HTTP 인터페이스로 교체하는 핵심 단계
+  - **비고**: `GET /v1/sessions/{id}`는 클라이언트가 자신의 세션 요약(RecentContext, ActiveGoal)을 조회하는 **사용자 facing** 엔드포인트로, 응답에 SessionState 전체가 아닌 요약 필드만 포함. `GET /v1/admin/sessions/{id}`(Task 7-4-3)는 디버깅용으로 SessionState 전체를 반환하는 **관리자 전용** 엔드포인트로 구분
   - **산출물**: `internal/api/handler.go`
 
 - [ ] **Task 7-1-2b. 헬스체크 엔드포인트 구현**
@@ -785,6 +911,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **산출물**: `internal/api/redis_async_task_repository.go`
 
 ### Step 7-3. Queue 구조
+
+- [ ] **Task 7-3-0. AsyncTask.Payload → AgentState 변환 어댑터 구현**
+  - **무엇**: `POST /v1/agent/run`의 `RunRequest`(Task 7-1-1)를 `AsyncTask.Payload`로 직렬화하는 로직과, Worker goroutine에서 `AsyncTask.Payload`를 역직렬화해 `AgentState`로 변환하는 어댑터 함수 구현
+  - **왜**: Task 7-3-3의 Worker 루프가 `AsyncTask.Payload → AgentState` 변환을 전제로 하지만, Payload 타입과 변환 경로가 먼저 정의되지 않으면 Worker 구현 중 타입을 즉석에서 결정해야 함. Phase 6의 `task_adapter.go`(Task 6-3-0)가 같은 이유로 별도 Task였던 것과 동일
+  - **비고**: `RunRequest.SessionID`와 `RunRequest.UserInput`을 `AgentState`의 대응 필드로 매핑. Phase 6 `orchestration.Task`와 달리 `AsyncTask`는 HTTP API 요청 단위이므로 WorkingMemory 주입이 필요 없음
+  - **산출물**: `internal/queue/payload_adapter.go`
 
 - [ ] **Task 7-3-1. TaskQueue 인터페이스 정의**
   - **무엇**: `Enqueue(task)`, `Dequeue() (task, error)` 인터페이스
@@ -843,8 +975,16 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `AsyncTask` 상태에 `waiting_for_user` 추가 필요 (Task 7-2-1 `async_task.go` 수정). Phase 3(Task 3-1-1)에서 CLI 환경의 `ask_user → respond_directly 대체` 처리는 그대로 유지하되, HTTP API 환경에서는 이 Task의 메커니즘으로 처리
   - **산출물**: `internal/api/async_task.go` 수정 (`waiting_for_user` 상태 추가), `internal/api/handler.go` 수정 (`POST /v1/tasks/{id}/input` 엔드포인트), `internal/agent/runtime.go` 수정 (ask_user 감지 후 channel 또는 저장소 경유 대기 패턴)
 
+### Step 7-6. 설계 결정 문서화
+
+- [ ] **Task 7-6-1. Phase 7 설계 결정 기록**
+  - **무엇**: `orchestration.Task`(Phase 6 sub-task)와 `api.AsyncTask`(HTTP 요청 단위) 개념 분리 근거, ask_user 비동기 대기 메커니즘 선택 이유(runtime.Run() 재호출 방식), HTTP 라우터 선택 결정을 `docs/decisions/phase7.md`에 기록
+  - **왜**: 두 Task 타입의 역할 경계가 코드에서는 명확하지 않음. Phase 9 문서화 시 이 경계를 설명할 기반이 됨
+  - **산출물**: `docs/decisions/phase7.md`
+
 ### Phase 7 Exit Criteria
 
+- `cmd/agent-api/main.go`로 HTTP 서버가 실제로 기동되는 것 확인 (`go run ./cmd/agent-api/`)
 - `POST /v1/agent/run` 요청이 task를 queue에 넣고 즉시 task ID 반환 확인
 - `GET /v1/tasks/{id}`로 실행 중 / 완료 / 실패 상태 조회 확인
 - Worker가 queue에서 task를 꺼내 `runtime.Run()`을 호출하고 결과를 저장소에 영속화 확인
@@ -854,6 +994,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - `GET /v1/admin/tasks`로 최근 task 목록 조회, `GET /v1/admin/tasks/failed`로 실패 task 필터링 조회 확인
 - `GET /v1/admin/stats/tools`로 tool별 호출 횟수 및 에러율 조회 확인
 - `ask_user` ActionType 발생 시 task가 `waiting_for_user` 상태로 전환되고, `POST /v1/tasks/{id}/input`으로 입력 제출 후 task가 재개되는 것 확인
+- `go test -race ./internal/queue/...` 통과 확인 (Worker goroutine 동시 접근 race condition 없음)
 - 해당 Phase의 주요 설계 결정을 `docs/decisions/phase7.md`에 기록
 
 ---
@@ -878,6 +1019,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 8-2-1. session별 token 누적 추적**
   - **무엇**: Phase 3의 TokenUsage를 session 단위로 합산하는 집계 로직. TokenTracker는 `map[sessionID]TokenUsage` 형태의 자체 in-memory 저장소를 갖고, SessionRepository에 의존하지 않음
   - **왜**: 요청별 token이 아닌 session 전체 비용이 실제 운영 비용 단위임. `llm → state` 패키지 의존을 만들지 않으려면 TokenTracker가 독립 저장소를 갖는 구조가 필요
+  - **비고**: Phase 7에서 Worker goroutine이 동시에 여러 개 실행되므로 map 접근은 반드시 `sync.Mutex`로 보호해야 함. `go test -race`로 race detector 검증 필수
   - **산출물**: `internal/llm/token_tracker.go`
 
 - [ ] **Task 8-2-2. 비용 한도 초과 시 중단 정책 구현**
@@ -887,16 +1029,22 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 8-3. Observability
 
-- [ ] **Task 8-3-1. Logger에 OTel span trace ID 연동**
-  - **무엇**: Phase 3(Task 3-6-1)에서 만든 structured logger의 `trace_id` 필드를 OTel span의 TraceID/SpanID로 교체. `context.Context`에서 span을 꺼내 logger 필드에 자동 주입하도록 수정
-  - **왜**: Phase 3의 logger는 request_id 기반의 자체 trace_id를 사용함. OTel 연동 이후에는 span TraceID가 trace의 단일 기준이 되어야 Jaeger 등 외부 트레이서와 로그가 같은 ID로 연결됨
-  - **비고**: logger 인터페이스는 변경하지 않음 — 내부 구현에서 span을 꺼내는 방식으로만 수정. Task 8-3-2(OTel SDK 초기화)가 완료된 이후에 진행
-  - **산출물**: `internal/observability/logger.go` 수정
+- [ ] **Task 8-3-0. OpenTelemetry 의존성 추가**
+  - **무엇**: `go get go.opentelemetry.io/otel`, `go get go.opentelemetry.io/otel/sdk`, `go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc`(또는 stdout exporter) 실행 후 `go mod tidy`
+  - **왜**: Task 8-3-1(OTel SDK 초기화)에서 `go.opentelemetry.io/otel` 패키지를 import하는데, go.mod에 없으면 첫 줄 작성 즉시 빌드가 깨짐. OTel은 관련 패키지가 여러 모듈로 나뉘어 있어 한 번에 추가해야 의존성 충돌 없이 go mod tidy가 통과됨
+  - **비고**: stdout exporter부터 시작하는 것을 권장 — OTLP/Jaeger는 exporter 교체만으로 나중에 변경 가능. 선택한 exporter와 버전을 Task 완료 시 기록할 것
+  - **산출물**: `go.mod`, `go.sum` 갱신
 
-- [ ] **Task 8-3-2. OpenTelemetry SDK 초기화**
+- [ ] **Task 8-3-1. OpenTelemetry SDK 초기화**
   - **무엇**: `TracerProvider` 초기화, exporter 설정(stdout 또는 OTLP), SDK bootstrap 코드 작성. `docker-compose.yml`에 Jaeger 또는 OTEL Collector 컨테이너 추가
   - **왜**: span을 추가하기 전에 TracerProvider가 없으면 span 데이터가 어디에도 전송되지 않음. exporter 설정 없이는 trace 확인 자체가 불가능
   - **산출물**: `internal/observability/tracer.go` (초기화 함수), `docker-compose.yml` 수정
+
+- [ ] **Task 8-3-2. Logger에 OTel span trace ID 연동**
+  - **무엇**: Phase 3(Task 3-6-1)에서 만든 structured logger의 `trace_id` 필드를 OTel span의 TraceID/SpanID로 교체. `context.Context`에서 span을 꺼내 logger 필드에 자동 주입하도록 수정
+  - **왜**: Phase 3의 logger는 request_id 기반의 자체 trace_id를 사용함. OTel 연동 이후에는 span TraceID가 trace의 단일 기준이 되어야 Jaeger 등 외부 트레이서와 로그가 같은 ID로 연결됨
+  - **비고**: logger 인터페이스는 변경하지 않음 — 내부 구현에서 span을 꺼내는 방식으로만 수정. Task 8-3-1(OTel SDK 초기화) 완료 이후에 진행
+  - **산출물**: `internal/observability/logger.go` 수정
 
 - [ ] **Task 8-3-3. OpenTelemetry trace 연결**
   - **무엇**: request → planner → tool → verifier 구간에 OTel span 추가
@@ -918,6 +1066,13 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `PolicyLayer`는 기존 구현체를 교체하는 것이 아닌 단일 진입점(`PolicyLayer.Check()`)으로 감싸는 파사드 역할. `cost_policy.go`는 그대로 유지하되 `PolicyLayer.Check()`가 내부적으로 호출하는 구조. `runtime.go`에서 기존 개별 정책 호출을 `PolicyLayer.Check()` 단일 호출로 교체
   - **산출물**: `internal/agent/policy.go`, `internal/agent/runtime.go` 수정 (PolicyLayer 호출 경로 추가)
 
+### Step 8-6. 설계 결정 문서화
+
+- [ ] **Task 8-6-1. Phase 8 설계 결정 기록**
+  - **무엇**: PolicyLayer 파사드 구조 선택 이유, per-tool timeout 외부화 방식, OTel exporter 선택(stdout vs OTLP vs Jaeger) 근거, TokenTracker 동시성 보호 전략을 `docs/decisions/phase8.md`에 기록
+  - **왜**: Phase 8은 운영 고도화 단계로 각 결정이 인프라 변경과 연결됨. Phase 9 포트폴리오 문서에서 "운영 가능성"을 설명할 때 이 결정들이 근거가 됨
+  - **산출물**: `docs/decisions/phase8.md`
+
 ### Phase 8 Exit Criteria
 
 - per-tool timeout 초과 시 `tool_execution_failed` (retryable) 에러 반환 확인
@@ -925,11 +1080,20 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - session 누적 token이 임계값 초과 시 loop 중단 확인
 - OTel span이 request → planner → tool → verifier 구간에 기록 확인
 - PolicyLayer에서 tool 사용 제한 / max step / 비용 한도 단일 인터페이스로 적용 확인
-- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase8.md`에 기록
+- `go test -race ./internal/llm/...` 통과 확인 (TokenTracker 동시 접근 안전성)
+- 해당 Phase의 주요 설계 결정을 `docs/decisions/phase8.md`에 기록 (Task 8-6-1)
 
 ---
 
 ## Phase 9 — 문서화 / 포트폴리오
+
+### Step 9-0. CI 자동화
+
+- [ ] **Task 9-0-1. GitHub Actions CI 워크플로우 추가**
+  - **무엇**: push/PR 시 `go build ./...` + `go vet ./...` + `make test-unit`(`go test ./...`, integration 태그 제외) + `go test -race ./...`(unit 범위)를 실행하는 워크플로우
+  - **왜**: 포트폴리오에서 CI 배지가 있는 레포는 코드 신뢰도를 높임. "코드가 실제로 돌아간다"는 증거가 CI 통과로 증명되어야 함. Phase 4-0-1에서 수립한 `make test-unit` 타겟을 여기서 활용
+  - **비고**: 통합 테스트(`//go:build integration`)는 인프라(Redis, Postgres) 의존 때문에 CI 실행 대상에서 제외. 추후 필요 시 Docker service를 GitHub Actions에 추가해 확장 가능
+  - **산출물**: `.github/workflows/ci.yml`
 
 ### Step 9-1. README 고도화
 
@@ -943,7 +1107,8 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [ ] **Task 9-2-1. 컴포넌트별 아키텍처 문서 작성**
   - **무엇**: runtime overview, planner, memory, tool router, multi-agent 각각의 설계 의도와 경계를 설명하는 문서
   - **왜**: 코드만 있으면 설계 의도가 드러나지 않음. 왜 이렇게 나눴는지를 설명해야 설계 역량을 보여줄 수 있음
-  - **산출물**: `docs/01-runtime-overview.md`, `docs/02-planner.md`, `docs/03-memory.md`, `docs/04-tool-router.md`, `docs/05-multi-agent.md`
+  - **비고**: Phase 0 Task 0-5-1에서 작성한 `docs/architecture-overview.md`는 전체 흐름 다이어그램(개요). 이 Task의 산출물은 컴포넌트별 심화 문서로 역할이 다름. `docs/architecture-overview.md`는 이 Task에서 갱신하거나 "개요는 이 파일 참고"로 상호 링크를 추가해 중복을 방지
+  - **산출물**: `docs/01-runtime-overview.md`, `docs/02-planner.md`, `docs/03-memory.md`, `docs/04-tool-router.md`, `docs/05-multi-agent.md`, `docs/architecture-overview.md` 링크 갱신
 
 ### Step 9-3. 실행 시나리오 문서
 

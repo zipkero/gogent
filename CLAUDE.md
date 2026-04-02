@@ -35,9 +35,15 @@
 
 - `internal/planner` — Plan 결정만. State를 수정하지 않는다.
 - `internal/executor` — Tool 실행 위임만. Planner 결과(`PlanResult`)를 입력으로 받는다.
-- `internal/tools` — Tool 구현 + Registry + Router. Runtime 루프를 알지 않는다.
+- `internal/tools` — Tool 구현 + Registry + Router. Runtime 루프를 알지 않는다. `MemoryManager`가 필요한 tool은 인터페이스를 주입받아 사용하며, `internal/memory` 패키지에 직접 의존하지 않는다.
 - `internal/state` — 상태 타입 정의만. 비즈니스 로직을 포함하지 않는다.
 - `internal/agent` — Runtime loop + finish 조건 + retry 정책. 최상위 조율자.
 - `internal/memory` — Session + Long-term memory. 저장소를 인터페이스로 분리한다.
+- `internal/verifier` — Verifier + Reflector 인터페이스 및 구현체. `internal/agent`에 주입되며, `internal/agent`에 직접 의존하지 않는다.
+- `internal/observability` — structured logger + OTel 초기화. 다른 internal 패키지를 참조하지 않는다.
+- `internal/orchestration` — Multi-agent 조율. `internal/agent`(Runtime)를 재사용한다(`orchestration → agent`). `internal/agent`는 `internal/orchestration`을 알지 않는다(역방향 의존 금지).
+- `internal/api` — HTTP 핸들러 + AsyncTask 타입 + 저장소 인터페이스. `internal/agent`와 `internal/queue`를 직접 알지 않는다. 핸들러는 `TaskQueue` 인터페이스와 `AsyncTaskRepository` 인터페이스만 주입받는다.
+- `internal/queue` — TaskQueue 인터페이스 + Worker. Worker는 `internal/agent`(Runtime)와 `internal/api`(AsyncTaskRepository)에 의존한다(`queue → agent`, `queue → api`).
+- `testutil/` — 테스트 전용 mock 구현체(MockLLMClient 등). 프로덕션 코드에서 import 금지. `internal/` 패키지를 참조할 수 있으나 참조 방향은 항상 단방향(testutil → internal).
 
 순환 참조가 발생할 경우 `internal/types` 공유 타입 패키지로 해결한다 (`docs/architecture-overview.md` 참고).
