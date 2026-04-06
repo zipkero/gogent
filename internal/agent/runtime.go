@@ -37,10 +37,11 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 			return s, fmt.Errorf("planner: %w", err)
 		}
 
-		// 2. respond_directly 이면 FinalAnswer 를 먼저 채운다.
+		// 2. respond_directly / summarize 이면 FinalAnswer 를 먼저 채운다.
 		//    IsFinished 가 plan 반영 전 state 를 기준으로 판단하므로
-		//    respond_directly + FinalAnswer 케이스는 여기서 채운 뒤 검사한다.
-		if plan.ActionType == types.ActionRespondDirectly {
+		//    FinalAnswer 를 여기서 채운 뒤 검사해야 즉시 종료된다.
+		//    summarize 는 Executor 를 호출하지 않고 Reasoning 을 그대로 FinalAnswer 로 사용한다.
+		if plan.ActionType == types.ActionRespondDirectly || plan.ActionType == types.ActionSummarize {
 			s.FinalAnswer = plan.Reasoning
 		}
 

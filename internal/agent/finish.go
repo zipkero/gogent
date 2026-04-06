@@ -18,6 +18,8 @@ const (
 	FinishByDirectResponse FinishReason = "direct_response"
 	// FinishByMaxStep 은 StepCount 가 maxStep 에 도달해 loop가 강제 종료된 경우다.
 	FinishByMaxStep FinishReason = "max_step"
+	// FinishBySummarize 는 Planner가 ActionSummarize 를 반환해 loop가 종료된 경우다.
+	FinishBySummarize FinishReason = "summarize"
 	// FinishByFatalError 는 복구 불가능한 에러로 loop가 종료된 경우다.
 	FinishByFatalError FinishReason = "fatal_error"
 )
@@ -46,6 +48,11 @@ func IsFinished(plan types.PlanResult, s state.AgentState, maxStep int) FinishRe
 	// 2. respond_directly 이고 FinalAnswer 가 이미 채워진 경우
 	if plan.ActionType == types.ActionRespondDirectly && s.FinalAnswer != "" {
 		return FinishResult{Finished: true, Reason: FinishByDirectResponse}
+	}
+
+	// 2a. summarize 이고 FinalAnswer 가 이미 채워진 경우
+	if plan.ActionType == types.ActionSummarize && s.FinalAnswer != "" {
+		return FinishResult{Finished: true, Reason: FinishBySummarize}
 	}
 
 	// 3. StepCount 가 maxStep 에 도달한 경우

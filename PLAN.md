@@ -314,7 +314,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `retry`는 Runtime/RetryPolicy의 루프 제어 정책 (Phase 5에서 별도 구현). `search_memory`는 ActionType이 아닌 Tool로 구현 (Registry에 등록). `ask_user`는 Phase 3에서 Runtime loop가 만나면 즉시 `respond_directly`로 대체 처리(loop 종료)하며, Phase 8 HTTP API 환경에서의 비동기 사용자 입력 대기 메커니즘은 Phase 8에서 별도 설계한다
   - **산출물**: `internal/planner/action_type.go` 수정
 
-- [ ] **Task 3-1-2. Runtime loop에 `summarize` ActionType 처리 분기 추가**
+- [x] **Task 3-1-2. Runtime loop에 `summarize` ActionType 처리 분기 추가**
   - **무엇**: `Runtime.Run()` loop에서 ActionType이 `summarize`일 때의 처리 로직 구현. Executor를 호출하지 않고 `AgentState.ToolResults` 전체를 요약 입력으로 사용해 `respond_directly`와 동일하게 loop를 종료
   - **왜**: ActionType을 추가하면 Runtime loop에서 반드시 처리 분기가 있어야 함. 누락 시 `summarize`를 받은 루프가 정의되지 않은 동작을 함
   - **산출물**: `internal/agent/runtime.go` 수정
