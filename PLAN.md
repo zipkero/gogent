@@ -347,7 +347,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 3-4. LLM Planner 연결
 
-- [ ] **Task 3-4-1. OpenAI LLMClient 구현**
+- [x] **Task 3-4-1. OpenAI LLMClient 구현**
   - **무엇**: `LLMClient` 인터페이스를 구현하는 OpenAI API 클라이언트
   - **왜**: Phase 0에서 정의한 인터페이스의 실제 구현체. 이것이 있어야 LLMPlanner가 동작함
   - **비고**: LLM API 호출 시 `context.WithTimeout`으로 per-call deadline 설정 필수. timeout 없이는 LLM 응답 지연 시 goroutine이 무기한 대기함. Phase 8(Task 8-1-2)의 전체 request deadline과 별개로, 개별 LLM 호출 단위 timeout을 이 시점에 적용
