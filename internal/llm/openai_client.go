@@ -19,6 +19,7 @@ const (
 // OpenAIClient 는 OpenAI Chat Completions API를 호출하는 LLMClient 구현체다.
 type OpenAIClient struct {
 	apiKey     string
+	model      string
 	httpClient *http.Client
 	timeout    time.Duration
 }
@@ -34,6 +35,16 @@ func WithTimeout(d time.Duration) OpenAIOption {
 	}
 }
 
+// WithModel 은 사용할 모델을 설정한다.
+// 기본값: defaultModel
+func WithModel(model string) OpenAIOption {
+	return func(c *OpenAIClient) {
+		if model != "" {
+			c.model = model
+		}
+	}
+}
+
 // WithHTTPClient 는 커스텀 http.Client를 주입한다. (테스트 또는 프록시 용도)
 func WithHTTPClient(hc *http.Client) OpenAIOption {
 	return func(c *OpenAIClient) {
@@ -46,6 +57,7 @@ func WithHTTPClient(hc *http.Client) OpenAIOption {
 func NewOpenAIClient(apiKey string, opts ...OpenAIOption) *OpenAIClient {
 	c := &OpenAIClient{
 		apiKey:     apiKey,
+		model:      defaultModel,
 		httpClient: &http.Client{},
 		timeout:    defaultTimeout,
 	}
@@ -94,18 +106,13 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	callCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	model := req.Model
-	if model == "" {
-		model = defaultModel
-	}
-
 	messages := make([]openAIMessage, len(req.Messages))
 	for i, m := range req.Messages {
 		messages[i] = openAIMessage{Role: m.Role, Content: m.Content}
 	}
 
 	body := openAIRequest{
-		Model:       model,
+		Model:       c.model,
 		Messages:    messages,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,

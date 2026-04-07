@@ -358,7 +358,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: prompt 생성 로직이 planner 본체에 인라인으로 있으면 테스트와 수정이 어려움
   - **산출물**: `internal/planner/prompt_builder.go`
 
-- [ ] **Task 3-4-3. LLMPlanner 구현**
+- [x] **Task 3-4-3. LLMPlanner 구현**
   - **무엇**: LLMClient를 주입받아 `Plan()` 메서드에서 LLM 호출 → JSON 파싱 → PlanResult 반환
   - **왜**: mock planner를 실제 LLM 기반으로 교체하는 핵심 단계
   - **산출물**: `internal/planner/llm_planner.go`

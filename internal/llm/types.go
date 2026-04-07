@@ -9,7 +9,6 @@ type Message struct {
 
 // CompletionRequest 는 LLM에 전달하는 요청 구조체다.
 type CompletionRequest struct {
-	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
 	Temperature float64   `json:"temperature,omitempty"`
