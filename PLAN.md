@@ -363,7 +363,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: mock planner를 실제 LLM 기반으로 교체하는 핵심 단계
   - **산출물**: `internal/planner/llm_planner.go`
 
-- [ ] **Task 3-4-4. ToolExecutor 구현**
+- [x] **Task 3-4-4. ToolExecutor 구현**
   - **무엇**: `internal/executor/tool_executor.go` 구현. `Execute(ctx, PlanResult)`에서 `ToolRouter.Route()`를 실제로 호출하는 Executor. `cmd/agent-cli/main.go`의 Runtime 조립 시 ToolExecutor를 주입하도록 변경
   - **왜**: `architecture-overview.md`에 "Phase 3: ToolExecutor (ToolRouter 실제 연결)"이 명시되어 있음. LLMPlanner가 tool_call PlanResult를 반환해도 MockExecutor가 그대로라면 실제 tool이 실행되지 않아 end-to-end 검증이 불가능함
   - **비고**: ToolRouter는 Phase 2에서 이미 완성됨. MockExecutor는 삭제하지 않고 테스트용으로 유지한다 — `runtime_test.go`를 포함한 기존 단위 테스트는 MockExecutor를 계속 주입해 사용하며, 운영 경로(`main.go`)에서만 ToolExecutor로 전환함

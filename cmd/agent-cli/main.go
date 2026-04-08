@@ -2,14 +2,51 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
+
+	"agentflow/internal/agent"
+	"agentflow/internal/executor"
+	"agentflow/internal/llm"
+	"agentflow/internal/planner"
+	"agentflow/internal/state"
+	"agentflow/internal/tools"
+	"agentflow/internal/tools/calculator"
+	"agentflow/internal/tools/search_mock"
+	"agentflow/internal/tools/weather_mock"
 )
 
 func main() {
-	fmt.Print("입력: ")
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		fmt.Fprintln(os.Stderr, "OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
+		os.Exit(1)
+	}
 
+	// Registry + tools 등록
+	registry := tools.NewInMemoryToolRegistry()
+	registry.Register(calculator.New())
+	registry.Register(search_mock.New())
+	registry.Register(weather_mock.New())
+
+	// ToolRouter + ToolExecutor
+	router := tools.NewToolRouter(registry)
+	exec := executor.NewToolExecutor(router)
+
+	// LLMPlanner
+	client := llm.NewOpenAIClient(apiKey)
+	p := planner.NewLLMPlanner(client, registry)
+
+	// Runtime
+	rt := &agent.Runtime{
+		Planner:  p,
+		Executor: exec,
+		MaxStep:  10,
+	}
+
+	fmt.Print("입력: ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
 		fmt.Fprintln(os.Stderr, "입력 읽기 실패")
@@ -22,6 +59,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO(Task 1-5-2): runtime.Run(ctx, input) 호출로 교체
-	fmt.Printf("수신된 입력: %q\n", input)
+	s := state.AgentState{
+		RequestID: agent.NewRequestID(),
+		SessionID: agent.FixedSessionID,
+		UserInput: input,
+		Status:    state.StatusRunning,
+	}
+
+	result, err := rt.Run(context.Background(), s)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "실행 실패: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("최종 답변: %s\n", result.FinalAnswer)
 }
