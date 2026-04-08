@@ -442,10 +442,10 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: Phase 4, 5, 7의 통합 테스트 파일 작성 시마다 파일 상단에 `//go:build integration` 태그 적용. GitHub Actions CI(Phase 9 Task 9-0-1)는 `make test-unit`만 실행
   - **산출물**: `Makefile` 수정 (test-unit/test-integration 타겟 추가), `README.md` 일부 갱신
 
-- [ ] **Task 4-0-2. Redis/Postgres 클라이언트 의존성 추가**
+- [x] **Task 4-0-2. Redis/Postgres 클라이언트 의존성 추가**
   - **무엇**: `go get github.com/redis/go-redis/v9`(또는 동등한 Redis 클라이언트)와 `go get github.com/jackc/pgx/v5`(또는 동등한 Postgres 드라이버) 실행 후 `go mod tidy`
   - **왜**: Task 4-2-4(RedisSessionRepository)와 Task 4-4-3(PostgresMemoryRepository) 구현 전에 의존성이 `go.mod`에 없으면 구현 파일 작성 즉시 빌드가 깨짐. 두 Task 직전에 한 번에 추가하는 것보다 Phase 4 진입 시 먼저 추가해야 이후 모든 Task의 `go build ./...` 확인이 일관됨
-  - **비고**: 특정 라이브러리가 아닌 인터페이스 기준 구현이므로 클라이언트 선택은 구현자 재량. 단, 선택한 라이브러리와 버전을 이 Task 완료 시 기록할 것
+  - **비고**: `github.com/redis/go-redis/v9 v9.18.0`, `github.com/jackc/pgx/v5 v5.9.1` 선택
   - **산출물**: `go.mod`, `go.sum` 갱신
 
 ### Step 4-1. Request State
