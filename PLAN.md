@@ -394,7 +394,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 3-5. Token Usage 로깅
 
-- [ ] **Task 3-5-1. TokenUsage 타입 정의**
+- [x] **Task 3-5-1. TokenUsage 타입 정의**
   - **무엇**: prompt tokens, completion tokens, total tokens, 호출 시각, request id를 담는 struct
   - **왜**: 타입이 없으면 로그가 비정형 문자열로 흩어짐. Phase 9 비용 정책의 기반 데이터
   - **산출물**: `internal/llm/token_usage.go`
