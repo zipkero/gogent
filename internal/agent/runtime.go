@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"agentflow/internal/executor"
+	"agentflow/internal/observability"
 	"agentflow/internal/planner"
 	"agentflow/internal/state"
 	"agentflow/internal/types"
@@ -15,12 +17,29 @@ type Runtime struct {
 	Planner  planner.Planner
 	Executor executor.Executor
 	MaxStep  int
+	logger   *slog.Logger
+}
+
+// NewRuntime 은 Runtime 을 생성한다.
+func NewRuntime(p planner.Planner, e executor.Executor, maxStep int) *Runtime {
+	return &Runtime{
+		Planner:  p,
+		Executor: e,
+		MaxStep:  maxStep,
+		logger:   observability.New(),
+	}
 }
 
 // Run 은 초기 AgentState 를 받아 finish 조건이 충족될 때까지 루프를 실행하고,
 // 최종 AgentState 와 에러를 반환한다.
 // ctx 취소 시 루프를 즉시 중단하고 현재 state 를 반환한다.
 func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState, error) {
+	base := r.logger
+	if base == nil {
+		base = slog.Default()
+	}
+	log := observability.FromContext(ctx, base)
+
 	for {
 		// ctx 취소 확인
 		select {
@@ -30,9 +49,18 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 		default:
 		}
 
+		log.InfoContext(ctx, "runtime step start",
+			"step_count", s.StepCount,
+			"last_tool_call", s.LastToolCall,
+		)
+
 		// 1. Plan
 		plan, err := r.Planner.Plan(ctx, s)
 		if err != nil {
+			log.ErrorContext(ctx, "runtime plan failed",
+				"step_count", s.StepCount,
+				"error", err,
+			)
 			s.Status = state.StatusFailed
 			return s, fmt.Errorf("planner: %w", err)
 		}
@@ -50,6 +78,11 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 		// 3. Finish 판단
 		result := IsFinished(plan, s, r.MaxStep)
 		if result.Finished {
+			log.InfoContext(ctx, "runtime finished",
+				"step_count", s.StepCount,
+				"reason", result.Reason,
+				"action_type", plan.ActionType,
+			)
 			s.Status = state.StatusFinished
 			return s, nil
 		}
@@ -57,6 +90,11 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 		// 4. Execute
 		toolResult, err := r.Executor.Execute(ctx, plan)
 		if err != nil {
+			log.ErrorContext(ctx, "runtime execute failed",
+				"step_count", s.StepCount,
+				"tool_name", plan.ToolName,
+				"error", err,
+			)
 			s.Status = state.StatusFailed
 			return s, fmt.Errorf("executor: %w", err)
 		}
@@ -66,5 +104,10 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 		s.LastToolCall = plan.ToolName
 		s.ToolResults = append(s.ToolResults, toolResult)
 		s.StepCount++
+
+		log.InfoContext(ctx, "runtime step complete",
+			"step_count", s.StepCount,
+			"tool_name", plan.ToolName,
+		)
 	}
 }

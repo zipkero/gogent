@@ -406,7 +406,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 3-6. 기본 Structured Logger 도입
 
-- [ ] **Task 3-6-1. Logger 인터페이스 및 기본 구현체 작성**
+- [x] **Task 3-6-1. Logger 인터페이스 및 기본 구현체 작성**
   - **무엇**: `trace_id`, `session_id`, `request_id`를 기본 필드로 포함하는 structured logger 래퍼. Go 표준 `log/slog` 기반으로 JSON 출력 형식 지원
   - **왜**: Phase 3에서 LLM 호출이 시작되면 어떤 요청이 어떤 플래너 결정을 내렸는지 로그 없이 추적이 불가능하다. Phase 8의 OTel span 연동 전까지의 디버깅 기반을 이 시점에 확보해야 Phase 4~7에서 실질적으로 활용 가능함
   - **비고**: `log/slog`는 Go 1.21 표준 패키지이므로 외부 의존 없음. Phase 8 Task 8-3-2는 이 logger에 OTel span trace ID를 연동하는 것으로 범위가 조정됨 (8-3-1은 OTel SDK 초기화, 8-3-2가 logger 연동). LLMPlanner, ToolRouter, Runtime의 주요 진입/종료 지점에서 이 logger를 사용하도록 교체

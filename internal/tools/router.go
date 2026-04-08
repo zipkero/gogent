@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"agentflow/internal/observability"
 	"agentflow/internal/types"
 )
 
@@ -13,10 +14,11 @@ import (
 // planner 와 tool 구현체 사이를 중재하며, 에러를 유형별로 분류해 반환한다.
 type ToolRouter struct {
 	registry ToolRegistry
+	logger   *slog.Logger
 }
 
 func NewToolRouter(registry ToolRegistry) *ToolRouter {
-	return &ToolRouter{registry: registry}
+	return &ToolRouter{registry: registry, logger: observability.New()}
 }
 
 // Route 는 PlanResult 의 ToolName 으로 tool 을 조회하고 ToolInput 을 검증한 뒤 실행한다.
@@ -27,15 +29,12 @@ func NewToolRouter(registry ToolRegistry) *ToolRouter {
 //   - tool_execution_failed   : Execute() 에서 error 반환 → retryable
 func (r *ToolRouter) Route(ctx context.Context, plan types.PlanResult) (types.ToolResult, error) {
 	start := time.Now()
-	requestID := requestIDFromCtx(ctx)
-	sessionID := sessionIDFromCtx(ctx)
+	log := observability.FromContext(ctx, r.logger)
 
 	tool, err := r.registry.Get(plan.ToolName)
 	if err != nil {
 		routeErr := types.NewToolNotFoundError(plan.ToolName)
-		slog.ErrorContext(ctx, "tool route failed",
-			"request_id", requestID,
-			"session_id", sessionID,
+		log.ErrorContext(ctx, "tool route failed",
 			"tool_name", plan.ToolName,
 			"error_kind", routeErr.Kind,
 			"error", routeErr.Msg,
@@ -46,9 +45,7 @@ func (r *ToolRouter) Route(ctx context.Context, plan types.PlanResult) (types.To
 
 	if err := validateInput(tool.InputSchema(), plan.ToolInput); err != nil {
 		routeErr := types.NewInputValidationError(err.Error())
-		slog.ErrorContext(ctx, "tool route failed",
-			"request_id", requestID,
-			"session_id", sessionID,
+		log.ErrorContext(ctx, "tool route failed",
 			"tool_name", plan.ToolName,
 			"error_kind", routeErr.Kind,
 			"error", routeErr.Msg,
@@ -61,9 +58,7 @@ func (r *ToolRouter) Route(ctx context.Context, plan types.PlanResult) (types.To
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
 		routeErr := types.NewToolExecutionError(plan.ToolName, err)
-		slog.ErrorContext(ctx, "tool route failed",
-			"request_id", requestID,
-			"session_id", sessionID,
+		log.ErrorContext(ctx, "tool route failed",
 			"tool_name", plan.ToolName,
 			"input", plan.ToolInput,
 			"error_kind", routeErr.Kind,
@@ -73,9 +68,7 @@ func (r *ToolRouter) Route(ctx context.Context, plan types.PlanResult) (types.To
 		return types.ToolResult{}, routeErr
 	}
 
-	slog.InfoContext(ctx, "tool route succeeded",
-		"request_id", requestID,
-		"session_id", sessionID,
+	log.InfoContext(ctx, "tool route succeeded",
 		"tool_name", plan.ToolName,
 		"input", plan.ToolInput,
 		"output_summary", outputSummary(result),
