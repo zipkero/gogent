@@ -52,10 +52,14 @@ func TestRun_EndToEnd_RealToolExecution(t *testing.T) {
 	rt := NewRuntime(p, e, 10)
 
 	s := state.AgentState{
-		RequestID: "req-e2e",
-		SessionID: "sess-e2e",
-		UserInput: "3 더하기 4를 계산해줘",
-		Status:    state.StatusRunning,
+		Request: state.RequestState{
+			RequestID: "req-e2e",
+			UserInput: "3 더하기 4를 계산해줘",
+		},
+		Session: &state.SessionState{
+			SessionID: "sess-e2e",
+		},
+		Status: state.StatusRunning,
 	}
 
 	got, err := rt.Run(context.Background(), s)
@@ -68,14 +72,14 @@ func TestRun_EndToEnd_RealToolExecution(t *testing.T) {
 	if got.StepCount != 1 {
 		t.Errorf("StepCount = %d, want 1", got.StepCount)
 	}
-	if len(got.ToolResults) != 1 {
-		t.Fatalf("ToolResults len = %d, want 1", len(got.ToolResults))
+	if len(got.Request.ToolResults) != 1 {
+		t.Fatalf("ToolResults len = %d, want 1", len(got.Request.ToolResults))
 	}
-	if got.ToolResults[0].ToolName != "calculator" {
-		t.Errorf("ToolResults[0].ToolName = %q, want %q", got.ToolResults[0].ToolName, "calculator")
+	if got.Request.ToolResults[0].ToolName != "calculator" {
+		t.Errorf("ToolResults[0].ToolName = %q, want %q", got.Request.ToolResults[0].ToolName, "calculator")
 	}
-	if got.ToolResults[0].Output != "7" {
-		t.Errorf("ToolResults[0].Output = %q, want %q", got.ToolResults[0].Output, "7")
+	if got.Request.ToolResults[0].Output != "7" {
+		t.Errorf("ToolResults[0].Output = %q, want %q", got.Request.ToolResults[0].Output, "7")
 	}
 	if mockLLM.CallCount() != 2 {
 		t.Errorf("LLM callCount = %d, want 2", mockLLM.CallCount())

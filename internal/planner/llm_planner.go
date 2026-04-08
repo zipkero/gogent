@@ -38,7 +38,7 @@ func (p *LLMPlanner) Plan(ctx context.Context, s state.AgentState) (types.PlanRe
 	log := observability.FromContext(ctx, p.logger)
 	toolList := p.registry.List()
 	systemPrompt := BuildSystemPrompt(s, toolList)
-	userPrompt := BuildUserPrompt(s.UserInput)
+	userPrompt := BuildUserPrompt(s.Request.UserInput)
 
 	req := llm.CompletionRequest{
 		Messages: []llm.Message{

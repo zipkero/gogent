@@ -9,7 +9,8 @@ type AgentState struct {
 	// Request 는 단일 Run() 호출 범위의 요청 데이터다.
 	Request RequestState
 	// Session 은 여러 Run() 호출을 넘어 지속되는 세션 데이터다.
-	Session SessionState
+	// nil 이면 세션 없음(anonymous 요청). 저장소에서 로드된 경우 non-nil.
+	Session *SessionState
 	// LastToolCall 은 직전 step 에서 실행된 tool 이름이다 (loop step 범위).
 	LastToolCall string
 	// FinalAnswer 는 loop 종료 시 사용자에게 반환할 최종 응답이다.

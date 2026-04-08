@@ -460,7 +460,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: Phase 1에서 확정한 loop 시그니처를 변경하지 않으면서 상태 분리를 달성하는 방법. 시그니처 변경 시 Planner/Executor 인터페이스 전체 연쇄 변경이 발생하므로 aggregator 패턴으로 파급을 최소화
   - **산출물**: `internal/state/agent_state.go` 수정 (RequestState, SessionState 포함 구조로 변경)
 
-- [ ] **Task 4-1-3. AgentState 구조 변경에 따른 인터페이스 및 테스트 수정**
+- [x] **Task 4-1-3. AgentState 구조 변경에 따른 인터페이스 및 테스트 수정**
   - **무엇**: `AgentState` 필드 구조 변경으로 인해 영향을 받는 Planner 인터페이스, Executor 인터페이스, MockPlanner, MockExecutor, `runtime_test.go` 일괄 수정 및 `go test ./...` 통과 확인
   - **왜**: Phase 1 Exit Criteria를 보호하는 `runtime_test.go`가 AgentState 구조 변경으로 컴파일 오류 또는 동작 오류가 발생할 수 있음. 회귀 검증 없이 넘어가면 Phase 5 이후에 문제가 드러남
   - **산출물**: `internal/planner/planner.go`, `internal/executor/executor.go`, mock 파일들, `internal/agent/runtime_test.go` 수정

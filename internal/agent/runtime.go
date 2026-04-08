@@ -106,7 +106,7 @@ func (r *Runtime) Run(ctx context.Context, s state.AgentState) (state.AgentState
 		// 5. State 반영
 		s.CurrentPlan = plan
 		s.LastToolCall = plan.ToolName
-		s.ToolResults = append(s.ToolResults, toolResult)
+		s.Request.ToolResults = append(s.Request.ToolResults, toolResult)
 		s.StepCount++
 
 		log.InfoContext(ctx, "runtime step complete",

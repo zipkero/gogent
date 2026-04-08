@@ -17,10 +17,14 @@ func newRuntime(p planner.Planner, e executor.Executor, maxStep int) *Runtime {
 
 func initialState() state.AgentState {
 	return state.AgentState{
-		RequestID: "req-1",
-		SessionID: "sess-1",
-		UserInput: "test input",
-		Status:    state.StatusRunning,
+		Request: state.RequestState{
+			RequestID: "req-1",
+			UserInput: "test input",
+		},
+		Session: &state.SessionState{
+			SessionID: "sess-1",
+		},
+		Status: state.StatusRunning,
 	}
 }
 
@@ -46,8 +50,8 @@ func TestRun_ToolCallThenFinish(t *testing.T) {
 	if got.StepCount != 1 {
 		t.Errorf("StepCount = %d, want 1", got.StepCount)
 	}
-	if len(got.ToolResults) != 1 || got.ToolResults[0].Output != "result1" {
-		t.Errorf("ToolResults = %v, want [{search result1}]", got.ToolResults)
+	if len(got.Request.ToolResults) != 1 || got.Request.ToolResults[0].Output != "result1" {
+		t.Errorf("ToolResults = %v, want [{search result1}]", got.Request.ToolResults)
 	}
 	if got.LastToolCall != "search" {
 		t.Errorf("LastToolCall = %q, want %q", got.LastToolCall, "search")

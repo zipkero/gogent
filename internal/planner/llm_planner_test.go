@@ -40,7 +40,9 @@ func newRegistry(toolNames ...string) tools.ToolRegistry {
 }
 
 func baseState() state.AgentState {
-	return state.AgentState{UserInput: "테스트 입력"}
+	return state.AgentState{Request: state.RequestState{
+		UserInput: "테스트 입력",
+	}}
 }
 
 // --- 성공 케이스 ---

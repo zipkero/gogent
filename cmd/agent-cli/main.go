@@ -60,10 +60,14 @@ func main() {
 	}
 
 	s := state.AgentState{
-		RequestID: agent.NewRequestID(),
-		SessionID: agent.FixedSessionID,
-		UserInput: input,
-		Status:    state.StatusRunning,
+		Request: state.RequestState{
+			RequestID: agent.NewRequestID(),
+			UserInput: input,
+		},
+		Session: &state.SessionState{
+			SessionID: agent.FixedSessionID,
+		},
+		Status: state.StatusRunning,
 	}
 
 	result, err := rt.Run(context.Background(), s)

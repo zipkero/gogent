@@ -55,9 +55,9 @@ func BuildSystemPrompt(s state.AgentState, toolList []tools.Tool) string {
 		b.WriteString(fmt.Sprintf("- **이번 step 목표**: %s\n", s.CurrentPlan.NextGoal))
 	}
 
-	if len(s.ToolResults) > 0 {
+	if len(s.Request.ToolResults) > 0 {
 		b.WriteString("\n**이전 tool 실행 결과:**\n")
-		for i, tr := range s.ToolResults {
+		for i, tr := range s.Request.ToolResults {
 			b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, tr.ToolName, tr.Output))
 		}
 	}
