@@ -414,7 +414,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ### Step 3-7. 설계 결정 문서화
 
-- [ ] **Task 3-7-1. Phase 3 설계 결정 기록**
+- [x] **Task 3-7-1. Phase 3 설계 결정 기록**
   - **무엇**: LLMPlanner 구현 방식, PlanResult JSON schema 설계 근거, hallucination 방어 전략, structured logger 도입 배경을 `docs/decisions/phase3.md`에 기록
   - **왜**: 코드만으로는 "왜 이렇게 설계했는지"가 드러나지 않음. 특히 LLMPlanner의 retry 정책(Phase 5에서 RetryPolicy로 교체 예정)과 hallucination 방어의 설계 근거는 나중에 되돌아볼 때 중요한 기준점이 됨
   - **산출물**: `docs/decisions/phase3.md`
