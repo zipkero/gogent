@@ -477,7 +477,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: in-memory와 Redis 구현을 교체할 수 있도록 저장소를 인터페이스로 분리
   - **산출물**: `internal/state/session_repository.go`
 
-- [ ] **Task 4-2-3. InMemorySessionRepository 구현**
+- [x] **Task 4-2-3. InMemorySessionRepository 구현**
   - **무엇**: map 기반 SessionRepository 구현체
   - **왜**: Redis 연결 전에 동작 검증이 필요. 인터페이스가 같으므로 나중에 Redis로 교체 가능
   - **산출물**: `internal/state/in_memory_session_repository.go`
