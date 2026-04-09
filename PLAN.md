@@ -501,7 +501,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `Memory` struct는 `internal/types/memory.go`에 정의한다. `internal/state`에서 `AgentState.RelevantMemories []types.Memory` 필드를 사용하려면 `state → memory` 의존이 생기므로 `internal/types`가 유일한 경계 안전 위치임. PlanResult, ToolResult와 동일한 이유 (Phase 2 Task 2-7-1 참고)
   - **산출물**: `internal/types/memory.go` (`internal/memory/memory.go` 아님)
 
-- [ ] **Task 4-4-2. MemoryRepository 인터페이스 정의**
+- [x] **Task 4-4-2. MemoryRepository 인터페이스 정의**
   - **무엇**: `Save(ctx, Memory) error`, `LoadByTags(ctx, tags []string, limit int) ([]Memory, error)` 인터페이스
   - **왜**: Postgres 의존을 런타임 코드에서 격리. 테스트 시 in-memory로 교체 가능. 조회 방식을 태그+limit으로 고정해야 나중에 embedding 검색으로 교체할 때 인터페이스 변경 범위가 명확해짐
   - **비고**: `LoadByTags`는 **OR 조건** (태그 중 하나라도 포함된 항목 조회). AND 조건은 결과가 지나치게 좁아져 실용성이 없음. Phase 9에서 embedding 검색으로 교체 시 인터페이스 시그니처는 유지하되 내부 구현만 교체
