@@ -488,7 +488,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: Phase 4 Exit Criteria의 "Redis 재시작 후 세션 복원" 검증을 위해 `docker-compose.yml`의 Redis 서비스에 `--appendonly yes` 옵션을 추가해 AOF persistence를 활성화해야 함
   - **산출물**: `internal/state/redis_session_repository.go`, `docker-compose.yml` 수정 (AOF 활성화)
 
-- [ ] **Task 4-2-5. SessionRepository integration test 작성**
+- [x] **Task 4-2-5. SessionRepository integration test 작성**
   - **무엇**: InMemorySessionRepository와 RedisSessionRepository에서 동일한 테스트 케이스(저장 → 조회, 없는 ID 조회 에러)를 실행해 인터페이스 호환성 검증. Redis 재시작 후 복원 케이스는 RedisSessionRepository 전용 테스트로 분리
   - **왜**: Phase 4 Exit Criteria의 "Redis 재시작 후 세션 복원 확인"이 테스트 코드로 뒷받침되어야 함. Phase 5에서 AgentState 구조가 변경될 경우 SessionRepository 직렬화 동작의 회귀 보호도 필요
   - **산출물**: `internal/state/session_repository_test.go`
