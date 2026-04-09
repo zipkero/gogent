@@ -311,7 +311,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 - [x] **Task 3-1-1. ActionType 상수 2개 추가**
   - **무엇**: `ask_user`, `summarize` 추가. 기존 3개는 유지
   - **왜**: LLM이 이 타입들을 선택할 수 있어야 더 현실적인 시나리오 대응 가능
-  - **비고**: `retry`는 Runtime/RetryPolicy의 루프 제어 정책 (Phase 5에서 별도 구현). `search_memory`는 ActionType이 아닌 Tool로 구현 (Registry에 등록). `ask_user`는 Phase 3에서 Runtime loop가 만나면 즉시 `respond_directly`로 대체 처리(loop 종료)하며, Phase 8 HTTP API 환경에서의 비동기 사용자 입력 대기 메커니즘은 Phase 8에서 별도 설계한다
+  - **비고**: `retry`는 Runtime/RetryPolicy의 루프 제어 정책 (Phase 5에서 별도 구현). `ask_user`는 Phase 3에서 Runtime loop가 만나면 즉시 `respond_directly`로 대체 처리(loop 종료)하며, Phase 8 HTTP API 환경에서의 비동기 사용자 입력 대기 메커니즘은 Phase 8에서 별도 설계한다. Long-term Memory 조회는 Tool이 아닌 Runtime이 Run() 시작 시 UserInput 기반으로 1회 수행하는 방식으로 결정 (Phase 4 Task 4-6-1 참고)
   - **산출물**: `internal/planner/action_type.go` 수정
 
 - [x] **Task 3-1-2. Runtime loop에 `summarize` ActionType 처리 분기 추가**
@@ -493,20 +493,6 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: Phase 4 Exit Criteria의 "Redis 재시작 후 세션 복원 확인"이 테스트 코드로 뒷받침되어야 함. Phase 5에서 AgentState 구조가 변경될 경우 SessionRepository 직렬화 동작의 회귀 보호도 필요
   - **산출물**: `internal/state/session_repository_test.go`
 
-### Step 4-3. Working Memory
-
-
-- [ ] **Task 4-3-1. WorkingMemory struct 정의**
-  - **무엇**: SearchResults, FilteredResults, Summaries 필드를 갖는 struct
-  - **왜**: tool 실행 중간 산출물이 AgentState에 뭉쳐 있으면 multi-agent 시나리오에서 데이터 경계가 불분명해짐
-  - **산출물**: `internal/state/working_memory.go`
-
-- [ ] **Task 4-3-2. WorkingMemory를 AgentState에 통합**
-  - **무엇**: `AgentState`에 `Working WorkingMemory` 필드 추가. Runtime의 `④ AgentState 반영` 단계에서 ToolResult의 유형(search/filter/summary)에 따라 `WorkingMemory`의 대응 필드에도 병렬 저장하는 로직 추가
-  - **왜**: WorkingMemory struct만 정의하고 AgentState와 연결하지 않으면 Phase 6 WorkerAgent까지 실제로 사용되지 않는 dead code가 됨. Phase 4 내에서 단일 agent가 search_mock → filter → summary 시나리오를 수행할 때 WorkingMemory가 올바르게 채워지는지 검증해야 Phase 6에서 안전하게 재사용 가능
-  - **비고**: ToolRouter의 시그니처(`Route(ctx, PlanResult) (ToolResult, error)`)는 변경하지 않는다. WorkingMemory 업데이트 책임은 Runtime에 있음 — ToolRouter는 상태 변경을 알지 못한다
-  - **산출물**: `internal/state/agent_state.go` 수정, `internal/agent/runtime.go` 수정 (ToolResult 유형별 WorkingMemory 저장 로직)
-
 ### Step 4-4. Long-term Memory
 
 - [ ] **Task 4-4-1. Memory struct 정의**
@@ -523,7 +509,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 - [ ] **Task 4-4-2-b. InMemoryMemoryRepository 구현**
   - **무엇**: 슬라이스 기반 MemoryRepository 구현체. `Save`는 슬라이스에 append, `LoadByTags`는 OR 조건(`tags` 중 하나라도 일치)으로 필터링 후 limit 적용
-  - **왜**: SessionRepository가 InMemory → Redis 순서를 따른 것과 동일한 이유. PostgresMemoryRepository(Task 4-4-3)가 완성되기 전에 `search_memory` tool(Task 4-5-3)과 MemoryManager(Task 4-5-2)를 단위 테스트하려면 Postgres 없이 동작하는 구현체가 필요함
+  - **왜**: SessionRepository가 InMemory → Redis 순서를 따른 것과 동일한 이유. PostgresMemoryRepository(Task 4-4-3)가 완성되기 전에 MemoryManager(Task 4-5-2)를 단위 테스트하려면 Postgres 없이 동작하는 구현체가 필요함
   - **산출물**: `internal/memory/in_memory_memory_repository.go`
 
 - [ ] **Task 4-4-2-c. Postgres 스키마 초기화 코드 작성**
@@ -554,32 +540,25 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: runtime은 MemoryManager만 알면 되고 구체 저장소는 주입으로 교체 가능
   - **산출물**: `internal/memory/default_memory_manager.go`
 
-- [ ] **Task 4-5-3. `search_memory` tool 구현**
-  - **무엇**: `query` 문자열을 입력받아 `MemoryManager.LoadRelevantMemory()`를 호출하고 결과를 ToolResult로 반환하는 tool 구현 및 Registry 등록
-  - **왜**: Task 3-1-1 비고에서 "`search_memory`는 ActionType이 아닌 Tool로 구현(Registry에 등록)"으로 결정했지만 구현 Task가 없었음. Registry에 등록되어야 LLMPlanner가 tool_call로 선택 가능하며, Phase 4의 Long-term Memory 피드백 루프가 실제로 닫힘
-  - **비고**: MemoryManager를 tool 생성 시 주입받는 방식으로 구현해 `internal/tools/search_memory` 패키지가 `internal/memory` 패키지에 직접 의존하지 않도록 한다 (인터페이스 주입). `docs/tools.md`에 spec 추가
-  - **산출물**: `internal/tools/search_memory/search_memory.go`, `docs/tools.md` 수정
-
 ### Step 4-6. Long-term Memory → Planner 피드백 연결
 
-- [ ] **Task 4-6-1. prompt_builder에 Long-term Memory 반영**
-  - **무엇**: `internal/planner/prompt_builder.go`를 수정해, `MemoryManager.LoadRelevantMemory()`로 조회한 결과를 system prompt의 context 섹션에 포함하는 로직 추가. Runtime이 Planner 호출 전 `MemoryManager.LoadRelevantMemory()`를 호출하고 결과를 `AgentState`에 임시 저장하거나 prompt_builder에 직접 전달하는 경로 구현
-  - **왜**: Phase 4에서 Long-term Memory를 저장하지만 LLMPlanner의 system prompt에 반영되지 않으면 메모리가 "저장은 되지만 활용되지 않는" dead code가 됨. 저장 → 조회 → 프롬프트 반영 경로가 Phase 4 내에서 닫혀야 함
-  - **비고**: `AgentState`에 `RelevantMemories []types.Memory` 필드를 추가하고 Runtime에서 채운 뒤 prompt_builder가 참조하는 방식 권장. `Memory` struct가 `internal/types`에 있으므로 `state → types` 의존만 발생하며 패키지 경계 규칙을 위반하지 않음 (Task 4-4-1에서 `internal/types/memory.go`로 정의). prompt_builder가 MemoryManager에 직접 의존하지 않아 패키지 경계가 유지됨
-  - **산출물**: `internal/agent/runtime.go` 수정 (MemoryManager 호출 경로 추가), `internal/state/agent_state.go` 수정 (RelevantMemories 필드), `internal/planner/prompt_builder.go` 수정
+- [ ] **Task 4-6-1. Runtime에 Long-term Memory 주입 및 prompt_builder 반영**
+  - **무엇**: `Runtime.Run()` 진입 직후(루프 시작 전) `MemoryManager.LoadRelevantMemory(ctx, userInput)`을 1회 호출해 결과를 `AgentState.RelevantMemories`에 저장. `prompt_builder`는 이 필드를 읽어 system prompt의 context 섹션에 포함
+  - **왜**: Long-term Memory 조회를 LLM이 tool로 호출하는 방식(A안)은 호출 누락 시 메모리가 활용되지 않는 신뢰성 문제가 있음. 대화형 에이전트는 과거 맥락이 항상 보장되어야 하므로 Runtime이 Run() 시작 시 1회 주입하는 방식(C안)을 채택. UserInput이 이미 확정된 시점에 조회하므로 쿼리 기준이 명확하고 루프 내 반복 DB 조회가 없음
+  - **비고**: `AgentState.RelevantMemories []types.Memory` 필드 추가. `Memory` struct가 `internal/types`에 있으므로 `state → types` 의존만 발생하며 패키지 경계 규칙을 위반하지 않음. prompt_builder는 MemoryManager를 직접 알지 않고 AgentState만 참조하므로 패키지 경계 유지. Run() 종료 후 새로 생성된 Memory는 별도 경로(MemoryManager.SaveMemory)로 저장
+  - **산출물**: `internal/agent/runtime.go` 수정 (Run() 시작 시 LoadRelevantMemory 호출), `internal/state/agent_state.go` 수정 (RelevantMemories 필드 추가), `internal/planner/prompt_builder.go` 수정 (RelevantMemories → system prompt 반영)
 
 ### Step 4-7. 설계 결정 문서화
 
 - [ ] **Task 4-7-1. Phase 4 설계 결정 기록**
-  - **무엇**: RequestState/SessionState/WorkingMemory 분리 근거, Memory struct의 `internal/types` 배치 결정, MemoryManager 파사드 패턴 선택 이유, RedisSessionRepository AOF 설정 배경을 `docs/decisions/phase4.md`에 기록
+  - **무엇**: RequestState/SessionState 분리 근거, Memory struct의 `internal/types` 배치 결정, MemoryManager 파사드 패턴 선택 이유, RedisSessionRepository AOF 설정 배경, Long-term Memory 주입 방식으로 C안(Run() 시작 시 1회 주입) 채택 근거를 `docs/decisions/phase4.md`에 기록
   - **왜**: 상태 분리 경계 결정은 Phase 6 multi-agent와 Phase 7 서비스화에서 계속 영향을 미침. 특히 `internal/types` 공유 타입 확장 이력이 문서에 없으면 나중에 경계 위반을 모르고 추가할 수 있음
   - **산출물**: `docs/decisions/phase4.md`
 
 ### Phase 4 Exit Criteria
 
 - 동일 SessionID로 재요청 시 이전 RecentContext 복원 확인
-- RequestState / SessionState / WorkingMemory 데이터가 서로 독립적으로 분리 확인
-- search_mock tool 실행 후 `AgentState.Working.SearchResults`에 결과 저장 확인 (WorkingMemory 통합 검증)
+- RequestState / SessionState 데이터가 서로 독립적으로 분리 확인
 - Redis 재시작 후 세션 복원 확인 (RedisSessionRepository)
 - Memory 저장 후 태그 OR 조건 조회 결과 확인
 - Long-term Memory 조회 결과가 LLMPlanner system prompt에 반영되어 다음 응답에 영향을 주는 것 확인
@@ -777,9 +756,9 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 ### Step 6-3. Worker Agent 구현
 
 - [ ] **Task 6-3-0. Task → AgentState 변환 어댑터 구현**
-  - **무엇**: `orchestration.Task`를 `AgentState`로 변환하는 어댑터 함수 구현. `TaskID`를 `RequestID`로, `InputPayload`를 `UserInput`으로 매핑. 이전 Task의 `TaskResult.Output`(선행 단계 실행 결과)은 `AgentState.Working.SearchResults` 등 WorkingMemory 대응 필드로 주입. WorkerAgent 내부에서 `Runtime.Run()` 호출 전에 사용
-  - **왜**: WorkerAgent.Execute(ctx, Task)에서 `Runtime.Run(ctx, AgentState)`를 호출하려면 Task를 AgentState로 변환하는 로직이 필요함. 이 어댑터가 없으면 각 WorkerAgent마다 변환 코드가 중복됨. 특히 FilterAgent는 SearchAgent의 `TaskResult.Output`을 입력으로 받는데, 이를 WorkingMemory에 주입해야 이후 tool 실행 시 데이터를 참조할 수 있음
-  - **비고**: 각 WorkerAgent는 독립적인 `AgentState`를 가짐. WorkingMemory 공유가 아닌 `TaskResult.Output` → `AgentState.Working.*` 변환으로 데이터를 전달하는 구조. ManagerAgent가 공유 WorkingMemory를 유지하지 않으며, 데이터 흐름은 항상 `TaskResult → 어댑터 → 다음 AgentState` 경로를 따름
+  - **무엇**: `orchestration.Task`를 `AgentState`로 변환하는 어댑터 함수 구현. `TaskID`를 `RequestID`로, `InputPayload`를 `UserInput`으로 매핑. 이전 Task의 `TaskResult.Output`(선행 단계 실행 결과)은 `RequestState.ToolResults`에 주입. WorkerAgent 내부에서 `Runtime.Run()` 호출 전에 사용
+  - **왜**: WorkerAgent.Execute(ctx, Task)에서 `Runtime.Run(ctx, AgentState)`를 호출하려면 Task를 AgentState로 변환하는 로직이 필요함. 이 어댑터가 없으면 각 WorkerAgent마다 변환 코드가 중복됨. FilterAgent는 SearchAgent의 `TaskResult.Output`을 입력으로 받아 `RequestState.ToolResults`에 주입하는 방식으로 데이터를 전달함
+  - **비고**: 각 WorkerAgent는 독립적인 `AgentState`를 가짐. 데이터 흐름은 `TaskResult.Output → 어댑터 → 다음 AgentState.Request.ToolResults` 경로를 따름. tool 카테고리 분류 없이 순서대로 쌓으며 Planner(LLM)가 ToolName과 Output을 보고 판단
   - **산출물**: `internal/orchestration/task_adapter.go`
 
 - [ ] **Task 6-3-0b. FilterAgent / RankingAgent용 mock tool 구현**
