@@ -36,7 +36,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: 환경변수가 없을 때 런타임 중간에 터지는 것을 방지
   - **산출물**: `internal/config/config.go`
 
-- [ ] **Task 0-2-4. Makefile 기본 타겟 추가**
+- [x] **Task 0-2-4. Makefile 기본 타겟 추가**
   - **무엇**: `make build`(`go build ./...`), `make test`(`go test ./...`), `make vet`(`go vet ./...`) 타겟 작성
   - **왜**: Phase 1부터 반복 실행하는 명령을 표준화해야 Phase 4에서 `make test-unit`/`make test-integration` 타겟을 추가할 때 기반이 됨. 지금 만들어두지 않으면 Phase 1~3에서 명령을 매번 직접 입력하거나, Phase 4에서 처음부터 Makefile을 작성하게 됨
   - **비고**: Phase 4 Task 4-0-1에서 이 Makefile에 `test-unit`/`test-integration` 타겟만 추가하면 됨
@@ -66,7 +66,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **왜**: `go build ./...` 통과 여부로 패키지 경계가 올바른지 확인. stub이 없으면 나중에 추가하는 패키지가 경계 규칙을 처음부터 지키는지 검증 불가
   - **산출물**: 각 패키지의 빈 stub 파일
 
-- [ ] **Task 0-3-3. go.mod Go 버전 확정**
+- [x] **Task 0-3-3. go.mod Go 버전 확정**
   - **무엇**: `go.mod`의 Go 버전을 **1.22 이상**으로 명시적으로 고정. `go version` 로컬 확인 후 `go mod tidy` 실행
   - **왜**: Phase 7에서 `net/http` ServeMux의 path parameter(`{id}`) 지원이 Go 1.22부터 가능함. 지금 버전을 고정하지 않으면 Phase 7에서 라우터를 통째로 교체해야 하는 상황이 생길 수 있음. Phase 0에서 확정해야 이후 모든 Phase가 동일한 환경을 전제할 수 있음
   - **산출물**: `go.mod` Go 버전 1.22+ 확인 및 필요 시 업데이트
@@ -548,6 +548,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `AgentState.RelevantMemories []types.Memory` 필드 추가. `Memory` struct가 `internal/types`에 있으므로 `state → types` 의존만 발생하며 패키지 경계 규칙을 위반하지 않음. prompt_builder는 MemoryManager를 직접 알지 않고 AgentState만 참조하므로 패키지 경계 유지. Run() 종료 후 새로 생성된 Memory는 별도 경로(MemoryManager.SaveMemory)로 저장
   - **산출물**: `internal/agent/runtime.go` 수정 (Run() 시작 시 LoadRelevantMemory 호출), `internal/state/agent_state.go` 수정 (RelevantMemories 필드 추가), `internal/planner/prompt_builder.go` 수정 (RelevantMemories → system prompt 반영)
 
+- [ ] **Task 4-6-2. Runtime 종료 후 Memory 저장 경로 구현**
+  - **무엇**: `Runtime.Run()` 종료 직후 대화 결과(FinalAnswer + ToolResults 요약)를 `MemoryManager.SaveMemory(ctx, Memory)`로 저장하는 로직 구현. 저장 대상은 `FinalAnswer`가 비어있지 않은 정상 완료 케이스만 해당 (실패/중단 시 저장하지 않음)
+  - **왜**: Task 4-6-1 비고에 "Run() 종료 후 새로 생성된 Memory는 별도 경로(MemoryManager.SaveMemory)로 저장"이라고 명시했으나, 이를 구현하는 Task가 없었음. 저장 경로가 없으면 LoadRelevantMemory가 항상 빈 결과를 반환하게 되어 Long-term Memory 기능이 실질적으로 동작하지 않음
+  - **비고**: Memory 저장 호출 위치는 `Runtime.Run()` 반환 직후 (CLI: `main.go`, HTTP API: Worker goroutine). Runtime 내부가 아닌 호출자에서 저장하는 이유는 Runtime이 MemoryManager에 직접 의존하는 범위를 최소화하기 위함 (Load는 Run 시작 시 1회, Save는 호출자 책임)
+  - **산출물**: `cmd/agent-cli/main.go` 수정 (Run 후 SaveMemory 호출), `internal/memory/default_memory_manager.go` 수정 (SaveMemory 구현 확인)
+
 ### Step 4-7. 설계 결정 문서화
 
 - [ ] **Task 4-7-1. Phase 4 설계 결정 기록**
@@ -827,7 +833,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
 
 ## Phase 7 — Runtime 서비스화
 
-> **Kafka 도입 여부**: README 기술 스택에 Kafka가 "후반 확장 스택 (Phase 7~)"으로 언급되어 있으나, Phase 8에서는 InMemoryTaskQueue(buffered channel)로 대체한다. Kafka 도입은 Phase 8 완료 후 검증된 큐 인터페이스를 기반으로 선택적으로 추가할 수 있으며, 이 커리큘럼의 필수 범위가 아니다.
+> **Kafka 도입 여부**: README 기술 스택에 Kafka가 "후반 확장 스택 (Phase 7~)"으로 언급되어 있으나, Phase 7에서는 InMemoryTaskQueue(buffered channel, Task 7-3-2)로 대체한다. Kafka 도입은 Phase 7 이후 검증된 큐 인터페이스를 기반으로 선택적으로 추가할 수 있으며, 이 커리큘럼의 필수 범위가 아니다.
 
 ### Step 7-0. 서비스화 사전 결정
 
@@ -914,6 +920,12 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **무엇**: queue에서 `AsyncTask`를 꺼내 `AsyncTask.Payload`를 `AgentState`로 변환한 뒤 `runtime.Run()`을 호출하고 결과를 `AsyncTaskRepository`에 저장하는 goroutine. `AsyncTask`(HTTP API 단위 task)와 Phase 6의 `orchestration.Task`(agent 내부 sub-task)는 별도 개념으로, 이 Worker는 HTTP API 요청 단위만 처리함
   - **왜**: API 서버와 실행 엔진을 논리적으로 분리하는 핵심 단계
   - **산출물**: `internal/queue/worker.go`
+
+- [ ] **Task 7-3-3b. Worker에서 Multi-Agent 요청 분기 구현**
+  - **무엇**: Worker가 `AsyncTask.Payload`를 분석해 단일 agent 요청이면 `runtime.Run()`을, multi-agent 요청이면 `ManagerAgent.Run()`을 호출하도록 분기 로직 추가. 분기 기준은 Payload에 포함된 `mode` 필드 (`single` | `multi`) 또는 TaskDecomposer가 Task를 2개 이상 반환하는지 여부로 결정
+  - **왜**: Phase 6에서 ManagerAgent + WorkerAgent로 multi-agent 시나리오를 구현하지만, Phase 7 Worker(Task 7-3-3)는 `runtime.Run()`만 호출함. 이 연결이 없으면 multi-agent 기능이 HTTP API에서 사용 불가능하고 CLI에서만 동작하는 미완성 기능으로 남음
+  - **비고**: Worker는 `ManagerAgent` 인터페이스만 주입받음. `internal/queue → internal/orchestration` 의존이 발생하며 이는 `queue → agent`와 동일한 방향이므로 순환 없음. `ManagerAgent`가 nil이면 항상 단일 agent 경로를 사용 (Phase 6 미완성 시 안전)
+  - **산출물**: `internal/queue/worker.go` 수정
 
 - [ ] **Task 7-3-4. Worker graceful shutdown 구현**
   - **무엇**: `context.Done()` 신호 수신 시 현재 처리 중인 task를 완료한 뒤 종료하는 로직. `sync.WaitGroup`으로 in-flight task 추적
@@ -1028,10 +1040,20 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: logger 인터페이스는 변경하지 않음 — 내부 구현에서 span을 꺼내는 방식으로만 수정. Task 8-3-1(OTel SDK 초기화) 완료 이후에 진행
   - **산출물**: `internal/observability/logger.go` 수정
 
-- [ ] **Task 8-3-3. OpenTelemetry trace 연결**
-  - **무엇**: request → planner → tool → verifier 구간에 OTel span 추가
-  - **왜**: latency 병목이 어느 컴포넌트에 있는지 trace 없이는 측정 불가
-  - **산출물**: 각 컴포넌트에 OTel span 추가
+- [ ] **Task 8-3-3a. Runtime + Planner OTel span 추가**
+  - **무엇**: `Runtime.Run()` 전체를 감싸는 root span, loop 각 step의 child span, `LLMPlanner.Plan()` 호출 span 추가. span attribute에 request_id, session_id, step_count, action_type 포함
+  - **왜**: latency 병목이 planner(LLM 호출)에 있는지 loop 제어에 있는지 구분하려면 이 두 컴포넌트의 span이 가장 먼저 필요함
+  - **산출물**: `internal/agent/runtime.go` 수정, `internal/planner/llm_planner.go` 수정
+
+- [ ] **Task 8-3-3b. Tool 실행 경로 OTel span 추가**
+  - **무엇**: `ToolRouter.Route()` span, 개별 `Tool.Execute()` span 추가. span attribute에 tool_name, duration, error 여부 포함
+  - **왜**: tool별 latency와 에러율을 trace에서 직접 확인할 수 있어야 Phase 8 Task 8-1-1(per-tool timeout 외부화)의 설정값 튜닝에 데이터 근거가 됨
+  - **산출물**: `internal/tools/router.go` 수정, `internal/executor/tool_executor.go` 수정
+
+- [ ] **Task 8-3-3c. Verifier + Memory OTel span 추가**
+  - **무엇**: `Verifier.Verify()`, `Reflector.Reflect()`, `MemoryManager.LoadRelevantMemory()` 호출에 span 추가
+  - **왜**: verification과 memory 조회가 loop latency에 미치는 영향을 측정해야 Phase 9 성능 최적화 판단이 가능
+  - **산출물**: `internal/verifier/simple_verifier.go` 수정, `internal/verifier/llm_reflector.go` 수정, `internal/memory/default_memory_manager.go` 수정
 
 ### Step 8-4. 에러 분류 체계 고도화
 
