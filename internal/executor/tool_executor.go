@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zipkero/gogent/internal/tools"
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/tools"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // ToolExecutor 는 ToolRouter 를 통해 실제 tool 을 실행하는 Executor 구현체다.

@@ -3,7 +3,7 @@ package executor
 import (
 	"context"
 
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // MockExecutor 는 미리 정의된 ToolResult 목록을 순서대로 반환하는 테스트용 Executor 다.

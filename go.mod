@@ -1,4 +1,4 @@
-module github.com/zipkero/gogent
+module github.com/zipkero/agent-runtime
 
 go 1.26
 

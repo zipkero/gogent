@@ -1,7 +1,7 @@
 package state
 
 import (
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/types"
 	"time"
 )
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/zipkero/gogent/internal/tools"
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/tools"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // Calculator 는 수식 문자열을 받아 계산 결과를 반환하는 Tool 구현체다.

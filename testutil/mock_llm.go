@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zipkero/gogent/internal/llm"
+	"github.com/zipkero/agent-runtime/internal/llm"
 )
 
 // MockLLMClient 는 테스트에서 실제 LLM API 호출 없이 응답을 제어하기 위한 mock 구현체다.

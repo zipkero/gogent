@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zipkero/gogent/internal/state"
-	"github.com/zipkero/gogent/internal/tools"
+	"github.com/zipkero/agent-runtime/internal/state"
+	"github.com/zipkero/agent-runtime/internal/tools"
 )
 
 // BuildSystemPrompt 는 AgentState 와 등록된 tool 목록을 받아

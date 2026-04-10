@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/zipkero/gogent/internal/executor"
-	"github.com/zipkero/gogent/internal/planner"
-	"github.com/zipkero/gogent/internal/state"
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/executor"
+	"github.com/zipkero/agent-runtime/internal/planner"
+	"github.com/zipkero/agent-runtime/internal/state"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 func newRuntime(p planner.Planner, e executor.Executor, maxStep int) *Runtime {

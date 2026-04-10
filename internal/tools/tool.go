@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // Tool 은 Agent가 실행할 수 있는 단일 기능 단위의 인터페이스다.

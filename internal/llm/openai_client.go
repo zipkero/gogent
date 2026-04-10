@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zipkero/gogent/internal/observability"
+	"github.com/zipkero/agent-runtime/internal/observability"
 )
 
 const (

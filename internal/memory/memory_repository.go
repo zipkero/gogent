@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // MemoryRepository 는 Long-term Memory 의 저장과 조회를 추상화한다.

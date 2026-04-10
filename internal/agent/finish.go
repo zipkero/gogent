@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/zipkero/gogent/internal/state"
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/state"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 const DefaultMaxStep = 10

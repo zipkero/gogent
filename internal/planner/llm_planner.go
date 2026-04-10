@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/zipkero/gogent/internal/llm"
-	"github.com/zipkero/gogent/internal/observability"
-	"github.com/zipkero/gogent/internal/state"
-	"github.com/zipkero/gogent/internal/tools"
-	"github.com/zipkero/gogent/internal/types"
+	"github.com/zipkero/agent-runtime/internal/llm"
+	"github.com/zipkero/agent-runtime/internal/observability"
+	"github.com/zipkero/agent-runtime/internal/state"
+	"github.com/zipkero/agent-runtime/internal/tools"
+	"github.com/zipkero/agent-runtime/internal/types"
 )
 
 // LLMPlanner 는 LLMClient 를 주입받아 LLM 호출로 PlanResult 를 결정하는 Planner 구현체다.
