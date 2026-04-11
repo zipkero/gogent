@@ -518,7 +518,7 @@ Phase별 상세 Task와 진행 상황을 추적한다.
   - **비고**: `internal/memory/migrate.go`에 `Migrate(db *sql.DB) error` 함수로 작성. `cmd/agent-cli/main.go` 또는 앱 초기화 경로에서 DB 연결 직후 호출. Phase 9에서 포트폴리오화 시 `golang-migrate` 전환을 검토할 수 있음
   - **산출물**: `internal/memory/migrate.go`
 
-- [ ] **Task 4-4-3. PostgresMemoryRepository 구현**
+- [x] **Task 4-4-3. PostgresMemoryRepository 구현**
   - **무엇**: Postgres에 Memory를 저장하고 `LoadByTags`를 태그 배열 **OR 조건** (`WHERE tags && $1`) + LIMIT으로 구현하는 구현체
   - **왜**: 장기 기억이 영구 저장소에 없으면 프로세스 재시작마다 소실됨. embedding 검색은 Phase 9 이후 선택 도입
   - **산출물**: `internal/memory/postgres_memory_repository.go`
